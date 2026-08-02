@@ -1,112 +1,48 @@
-# Top Gear P2P - Versione Personalizzata
+# 🏎️ Top Gear P2P - Versione Personalizzata
 
-🎮 **Gioca direttamente dal browser**
+🎮 **Gioca dal browser:** https://abatukam88.github.io/Top-Gear-P2P---Enhanced-Version/
 
-👉 https://abatukam88.github.io/Top-Gear-P2P---Enhanced-Version/
-
----
-
-> ⚠️ **Questo progetto è una versione personale basata sul progetto originale realizzato da 1001 Avventura.**
-> Tutti i meriti e i crediti del progetto originale appartengono al suo autore. Questa repository nasce esclusivamente come progetto di studio, sperimentazione e miglioramento personale.
-
-## Progetto originale
-
-Il progetto originale è stato sviluppato da **1001 Avventura**.
-
-📺 **Canale YouTube**  
-https://www.youtube.com/@1001avventura
-
-🎥 **Video originale del progetto**  
-https://www.youtube.com/watch?v=Ch1WsS0INRQ&t=1042s
-
-Consiglio di guardare il video originale per capire come è stato realizzato il progetto di partenza.
+> Progetto personale basato sul lavoro originale di **1001 Avventura**, realizzato interamente con l'aiuto dell'IA e testato manualmente — tutti i crediti originali vanno all'autore.
+>
+> 📺 Canale YouTube: https://www.youtube.com/@1001avventura
+> 🎥 Video originale: https://www.youtube.com/watch?v=Ch1WsS0INRQ&t=1042s
 
 ---
 
-# Modifiche introdotte
+## ✨ Novità principali
 
-Questa versione include alcune modifiche e miglioramenti rispetto al progetto originale.
+**🏁 Modalità Destruction Derby**
+Nuova modalità arena multiplayer oltre alla gara F1:
+- 4 arene (fango, sabbia, cemento, ghiaia) con ostacoli e barriere
+- 10 auto dedicate + bot con personalità diverse
+- Lobby d'attesa: l'host avvia con "VIA", i ritardatari entrano come osservatori
+- Meteo dinamico (pioggia, notte, nebbia) e audio sintetizzato (motore, schianti, esplosioni)
+- Terreno che sporca le auto (tranne su cemento)
+- Vince l'ultima auto in piedi (o chi ha più punti a tempo scaduto) — pulsante RIGIOCA incluso
+- Fix anti-freeze e anti-NaN per stabilità
 
-## 🏁 Modalità "Destruction Derby" (nuovo)
+**🎨 Grafica**
+Sprite PNG al posto del disegno su Canvas, nuovo selettore auto con anteprime, effetti Glow/Boost, DRS migliorato.
 
-Oltre alla gara F1 è stata aggiunta una seconda modalità: **arena demolition** multiplayer.
+**🌐 Multiplayer**
+Sincronizzazione auto selezionata tra i giocatori, modello corretto visibile a tutti.
 
-- Selettore **"Modalità Destruction Derby"** nel menu di ingresso (stessa stanza P2P della F1).
-- **4 arene** arredate: Landa di Ferro (fango), Deserto di Sassi (sabbia), Officina Junk (cemento), Esagono di Ghiaia — con barriere di pneumatici, pozzanghere, torri faro e segno "X" al centro.
-- **10 auto demo** dedicate (`auto derby/`).
-- **Lobby di attesa**: l'host decide quando partire col pulsante **🏁 VIA**; i ritardatari entrano come osservatori e pilotano dal round successivo.
-- Bots con personalità diverse per coprire le slot vuote.
-- **Meteo completo durante la gara**: sole, pioggia leggera/forte con gocce animate e schizzi, notte con fari e stelle, nebbia volumetrica.
-- **Audio sintetizzato**: rombo del motore, schianti, esplosioni, colpi al muro, beep di semaforo.
-- **Effetti di terreno**: su fango/ghiaia/sabbia le auto si sporcano con le ore di guida e fanno volare zolle di terra (aria pulita su cemento).
-- **Regola di vittoria**: l'**ultima macchina ancora in piedi vince**; in caso di tempo scaduto vince chi ha più punti. Pulsante **RIGIOCA** per un nuovo round senza ricaricare la pagina.
-- Ancora di robustezza: rende loop infallibile e cure anti-`NaN` per evitare il freeze dopo la vittoria.
-
-## Grafica
-
-- Auto realizzate con sprite PNG invece del disegno tramite Canvas.
-- Nuovo selettore delle vetture con anteprime.
-- Miglior rendering delle automobili.
-- Effetti Glow.
-- Effetti Boost.
-- Miglioramenti visivi del DRS.
-
-## Multiplayer
-
-- Sincronizzazione della vettura selezionata tra tutti i giocatori.
-- Ogni giocatore vede il modello corretto dell'auto.
-
-## Gameplay
-
-- Miglioramenti all'ingresso dei box.
-- Spawn dei giocatori più affidabile.
-- Piccole ottimizzazioni del gameplay.
-
-## Codice
-
-- Pulizia e riorganizzazione di alcune parti del codice.
-- Ottimizzazioni generali.
-- Diverse modifiche sperimentali.
+**🎮 Gameplay & Codice**
+Ingresso ai box e spawn più affidabili, codice pulito e ottimizzato.
 
 ---
 
-# Tecnologie utilizzate
+## 🛠️ Tecnologie
+HTML5 · CSS3 · JavaScript · HTML5 Canvas · Trystero P2P
 
-- HTML5
-- CSS3
-- JavaScript
-- HTML5 Canvas
-- Trystero P2P
+## 🤖 Strumenti AI usati nello sviluppo
+Gemini (immagini/sprite) · ChatGPT (prompt e supporto) · Kimi K2, Qwen, DeepSeek V4 Flash, DeepSeek Pro, Claude AI (programmazione e debug). Integrazione e test finali fatti manualmente.
 
----
+## ⚠️ Nota
+Essendo un progetto sperimentale/di studio, è probabile che siano presenti dei bug. Segnalazioni e feedback sono benvenuti.
 
-# Supporto tramite IA
+## 🎯 Scopo
+Progetto realizzato interamente tramite strumenti di Intelligenza Artificiale, con test e verifiche svolti manualmente.
 
-Durante lo sviluppo sono stati utilizzati diversi strumenti di Intelligenza Artificiale come supporto.
-
-- **Gemini** per la generazione delle immagini e degli sprite.
-- **ChatGPT** per la creazione dei prompt e come supporto durante lo sviluppo.
-- **Kimi K2**, **Qwen** e **Claude AI** come assistenza nella programmazione, nel debug e nella risoluzione di alcuni problemi.
-
-Le modifiche finali, l'integrazione e i test sono stati eseguiti manualmente.
-
----
-
-# Scopo del progetto
-
-Questa repository è stata realizzata esclusivamente per:
-
-- studio personale;
-- sperimentazione;
-- migliorare le competenze in JavaScript;
-- approfondire HTML5 Canvas;
-- sperimentare il multiplayer Peer-to-Peer;
-- imparare a utilizzare sprite e rendering 2D.
-
----
-
-# Ringraziamenti
-
-Un ringraziamento a **1001 Avventura** per aver condiviso gratuitamente il progetto originale e il relativo tutorial, che hanno rappresentato un'ottima base di studio.
-
-Se il progetto vi è piaciuto, vi consiglio di visitare il suo canale YouTube e guardare il video originale.
+## 🙏 Ringraziamenti
+Grazie a **1001 Avventura** per aver condiviso gratuitamente progetto e tutorial originali. Se vi piace, andate a visitare il suo canale!
