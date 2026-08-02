@@ -1,0 +1,1867 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Top Gear P2P — Corse Multiplayer</title>
+<style>
+:root{
+  --bg:#05070d; --panel:#0c1220; --line:#1c2740; --red:#ff3b4e; --gold:#ffd24d;
+  --green:#4dff88; --cyan:#4de3ff; --text:#e6ecff; --muted:#8492b8; --asphalt:#2b2e35;
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none;}
+html{font-size:clamp(17px, 0.75vw + 8px, 30px);} /* scala i testi (definiti in em) su schermi 2K/4K */
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+  font-family:'Consolas','SF Mono',ui-monospace,monospace;overflow:hidden;touch-action:none;}
+button{font-family:inherit;}
+#lobby{height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;
+  background:radial-gradient(ellipse at 50% 0%, #14101a 0%, #05070d 70%);touch-action:auto;overflow:auto;padding:20px;}
+#lobby h1{font-size:2.3em;letter-spacing:.25em;margin:0;color:var(--red);
+  text-shadow:0 0 18px rgba(255,59,78,.55);}
+#lobby p.sub{color:var(--muted);margin:-8px 0 6px;letter-spacing:.06em;font-size:.85em;text-align:center;max-width:520px;}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:22px 26px;
+  display:flex;flex-direction:column;gap:11px;width:340px;max-width:92vw;box-shadow:0 0 30px rgba(0,0,0,.4);}
+.card label{font-size:.72em;color:var(--muted);letter-spacing:.07em;}
+.card input,.card select{background:#080c16;border:1px solid var(--line);color:var(--text);padding:9px 11px;
+  border-radius:6px;font-family:inherit;font-size:.95em;outline:none;width:100%;}
+.card input:focus,.card select:focus{border-color:var(--red);}
+.carPicker{display:flex;gap:6px;flex-wrap:wrap;max-height:140px;overflow-y:auto;}
+.carPicker .carOpt{width:44px;height:44px;border-radius:6px;cursor:pointer;border:2px solid transparent;overflow:hidden;background:#080c16;display:flex;align-items:center;justify-content:center;}
+.carPicker .carOpt img{width:36px;height:36px;object-fit:contain;}
+.carPicker .carOpt.sel{border-color:var(--red);background:rgba(255,59,78,.12);}
+.schemeBtn{flex:1;background:#080c16;border:1px solid var(--line);border-radius:6px;padding:9px 4px;
+  cursor:pointer;text-align:center;font-size:.68em;color:var(--muted);line-height:1.4;}
+.schemeBtn .icon{font-size:1.25em;display:block;margin-bottom:2px;}
+.schemeBtn.sel{border-color:var(--red);color:var(--text);background:rgba(255,59,78,.09);}
+.row3{display:flex;gap:8px;}
+button#go{margin-top:4px;background:linear-gradient(135deg,var(--red),#b3001f);color:#fff;font-weight:bold;
+  border:none;padding:13px;border-radius:6px;cursor:pointer;letter-spacing:.1em;font-size:1em;}
+button#go:hover{filter:brightness(1.15);}
+.hint{font-size:.68em;color:var(--muted);line-height:1.55;}
+.miniToggle{display:flex;align-items:center;gap:8px;font-size:.75em;color:var(--muted);}
+#connectingCard,#capacityCard{align-items:center;text-align:center;}
+#goSpectator,#goNewRoom{background:#080c16;border:1px solid var(--line);color:var(--text);padding:9px 14px;
+  border-radius:6px;cursor:pointer;font-size:.8em;}
+
+#game{position:relative;height:100%;display:none;}
+canvas{display:block;background:#0d2f14;touch-action:none;}
+#world{position:absolute;top:0;left:0;}
+#mini{position:absolute;top:8px;right:8px;border:1px solid var(--line);border-radius:6px;background:rgba(8,12,22,.75);}
+.hud{position:absolute;pointer-events:none;font-size:.8em;letter-spacing:.02em;}
+#topbar{top:8px;left:8px;display:flex;flex-direction:column;gap:6px;}
+#topbar .box{background:rgba(8,12,22,.78);border:1px solid var(--line);border-radius:6px;padding:6px 12px;
+  display:flex;align-items:center;gap:10px;}
+#posBadge{font-size:1.6em;font-weight:bold;color:var(--gold);}
+#lapBadge{color:var(--text);font-size:.9em;}
+.bar{width:90px;height:8px;background:#180a0a;border:1px solid #3a1a1a;border-radius:4px;overflow:hidden;
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.5);}
+.bar>i{display:block;height:100%;transition:width .25s ease;}
+#tireBar>i{background:linear-gradient(90deg,var(--green),var(--gold),var(--red));}
+#fuelBar>i{background:var(--cyan);}
+#battBar>i{background:var(--gold);}
+#dmgBar>i{background:linear-gradient(90deg,var(--green),var(--gold),var(--red));}
+.statRow{display:flex;align-items:center;gap:6px;font-size:.86em;color:var(--muted);}
+#drsInd{padding:2px 8px;border-radius:4px;border:1px solid var(--line);font-size:.8em;font-weight:bold;color:var(--muted);}
+#drsInd.active{color:#0a1a0a;background:var(--green);border-color:var(--green);}
+#drsInd.avail{color:var(--green);border-color:var(--green);}
+#speedo{position:absolute;bottom:14px;left:14px;font-size:2.2em;font-weight:bold;color:var(--text);
+  text-shadow:0 0 12px rgba(0,0,0,.8);font-variant-numeric:tabular-nums;}
+#speedo span{font-size:.35em;color:var(--muted);}
+#timerBox{top:8px;left:50%;transform:translateX(-50%);text-align:center;}
+#timerBox .box{background:rgba(8,12,22,.78);border:1px solid var(--line);border-radius:6px;padding:6px 16px;}
+#lbPanel{top:8px;right:8px;margin-top:150px;width:190px;background:rgba(8,12,22,.82);border:1px solid var(--line);
+  border-radius:6px;padding:8px;pointer-events:auto;max-height:44vh;overflow:auto;}
+#lbPanel h4{margin:0 0 6px;font-size:.84em;letter-spacing:.08em;color:var(--muted);}
+#lbPanel .row{display:flex;justify-content:space-between;font-size:.88em;padding:4px 0;border-bottom:1px solid #16203a;}
+#lbPanel .row.me{color:var(--gold);}
+#countdown{position:absolute;top:0;left:0;right:0;bottom:0;display:none;align-items:center;justify-content:center;
+  pointer-events:none;z-index:20;}
+#countdown .num{font-size:9em;font-weight:bold;color:var(--red);text-shadow:0 0 40px rgba(255,59,78,.8);
+  animation:cdPulse .5s ease;}
+@keyframes cdPulse{from{transform:scale(1.5);opacity:0;}to{transform:scale(1);opacity:1;}}
+#lights{display:flex;gap:14px;position:absolute;top:22%;}
+#lights .lamp{width:32px;height:32px;border-radius:50%;background:#2a1010;border:2px solid #4a2020;
+  transition:background .15s ease, box-shadow .15s ease;}
+#lights .lamp.on{background:var(--red);box-shadow:0 0 22px rgba(255,59,78,.9), 0 0 46px rgba(255,59,78,.45);}
+#pitOverlay,#resultsOverlay,#seasonOverlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+  background:rgba(3,5,10,.82);z-index:25;pointer-events:auto;}
+.panelBox{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:22px 26px;max-width:560px;
+  width:92vw;max-height:86vh;overflow:auto;}
+.panelBox h2{margin:0 0 8px;color:var(--gold);letter-spacing:.06em;}
+.pitOpt{display:flex;align-items:center;justify-content:space-between;background:#080c16;border:1px solid var(--line);
+  border-radius:6px;padding:8px 12px;margin:6px 0;}
+.pitOpt input[type=range]{width:140px;}
+.tbl{width:100%;border-collapse:collapse;font-size:.85em;}
+.tbl th,.tbl td{padding:5px 8px;text-align:left;border-bottom:1px solid #16203a;}
+.tbl tr.me td{color:var(--gold);}
+.tbl tr.dnf td{color:#6a4040;}
+#chatWrap{position:absolute;bottom:8px;right:8px;width:230px;pointer-events:auto;}
+#chatLog{max-height:130px;overflow:auto;background:rgba(8,12,22,.75);border:1px solid var(--line);border-radius:6px 6px 0 0;
+  padding:6px;font-size:.72em;}
+#chatLog div{margin:2px 0;}
+#chatBar{display:flex;gap:4px;}
+#chatBar input{flex:1;background:rgba(8,12,22,.9);border:1px solid var(--line);border-top:none;color:var(--text);
+  padding:6px 8px;font-family:inherit;font-size:.75em;outline:none;}
+#commsBtns{display:flex;gap:4px;position:absolute;bottom:150px;right:8px;pointer-events:auto;}
+.commsBtn{background:rgba(8,12,22,.8);border:1px solid var(--line);border-radius:6px;padding:6px 9px;cursor:pointer;
+  color:var(--text);font-size:.95em;}
+.commsBtn.active{border-color:var(--green);color:var(--green);}
+.commsBtn.muted{border-color:var(--red);color:var(--red);}
+#peerAudios{position:absolute;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;}
+#touchControls{position:absolute;inset:0;display:none;pointer-events:none;z-index:15;}
+#tcStick{position:absolute;left:18px;bottom:18px;width:130px;height:130px;border-radius:50%;
+  background:rgba(255,255,255,.06);border:2px solid rgba(255,255,255,.15);pointer-events:auto;touch-action:none;}
+#tcStickKnob{position:absolute;width:56px;height:56px;border-radius:50%;background:rgba(255,59,78,.55);
+  top:37px;left:37px;pointer-events:none;}
+#tcPedals{position:absolute;right:18px;bottom:18px;display:flex;flex-direction:column;gap:10px;pointer-events:auto;}
+.tcBtn{width:74px;height:74px;border-radius:50%;background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.2);
+  display:flex;align-items:center;justify-content:center;font-size:1.5em;pointer-events:auto;touch-action:none;}
+.tcBtn:active,.tcBtn.pressed{background:rgba(255,59,78,.4);}
+#tcSmall{position:absolute;right:100px;bottom:18px;display:flex;flex-direction:column;gap:8px;pointer-events:auto;}
+.tcSmallBtn{width:54px;height:54px;border-radius:12px;background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.2);
+  display:flex;align-items:center;justify-content:center;font-size:1.05em;pointer-events:auto;touch-action:none;}
+.tcSmallBtn.pressed,.tcSmallBtn:active{background:rgba(77,227,255,.4);}
+#toast{position:absolute;top:44%;left:50%;transform:translate(-50%,-50%);font-size:1.6em;color:var(--gold);
+  text-shadow:0 0 14px rgba(0,0,0,.9);pointer-events:none;text-align:center;z-index:22;display:none;}
+#pitBadge{position:absolute;top:120px;left:8px;background:rgba(255,210,77,.15);border:1px solid var(--gold);
+  color:var(--gold);border-radius:6px;padding:5px 10px;font-size:.75em;display:none;}
+#helpBtn{position:absolute;bottom:8px;left:8px;background:rgba(8,12,22,.75);border:1px solid var(--line);
+  border-radius:6px;padding:6px 10px;font-size:.75em;color:var(--muted);cursor:pointer;pointer-events:auto;}
+@media (max-width:760px){#lbPanel{display:none;} #chatWrap{width:170px;}}
+</style>
+</head>
+<body>
+
+<div id="lobby">
+  <h1>🏁 TOP&nbsp;GEAR&nbsp;P2P</h1>
+  <p class="sub">Gara multiplayer serverless su Trystero — viste dall'alto, stagione a punti, box pit e comunicazione vocale/testuale in P2P diretto tra i browser.</p>
+
+  <div class="card" id="loginCard">
+    <div>
+      <label>Nome pilota</label>
+      <input id="name" maxlength="14" placeholder="Il tuo nome">
+    </div>
+    <div>
+      <label>Stanza (gara/campionato condiviso)</label>
+      <input id="room" maxlength="20" placeholder="MAIN" value="MAIN">
+    </div>
+    <div>
+      <label>Vettura</label>
+      <div class="carPicker" id="carPicker"></div>
+    </div>
+    <div>
+      <label>Schema di guida</label>
+      <div class="row3">
+        <div class="schemeBtn sel" data-scheme="kb"><span class="icon">⌨️</span>Tastiera</div>
+        <div class="schemeBtn" data-scheme="kbm"><span class="icon">🖱️</span>Tastiera+Mouse</div>
+        <div class="schemeBtn" data-scheme="touch"><span class="icon">👆</span>Touch</div>
+      </div>
+    </div>
+    <div>
+      <label>Piloti massimi in griglia se fondi tu la stanza (poi si aggiungono osservatori)</label>
+      <input id="maxDrivers" type="number" min="2" max="12" value="12">
+    </div>
+    <div class="miniToggle"><input type="checkbox" id="wantSpectator"> <span>Entra subito come osservatore</span></div>
+    <button id="go">SCENDI IN PISTA</button>
+    <div class="hint">Il primo pilota che entra in una stanza vuota ne fissa il tetto massimo di vetture in griglia (fino a 12). Chi entra dopo il limite diventa osservatore. La classifica di campionato resta viva finché almeno un browser è collegato alla stanza.</div>
+  </div>
+
+  <div class="card" id="connectingCard" style="display:none;">
+    <div id="connectingMsg">Connessione…</div>
+  </div>
+
+  <div class="card" id="capacityCard" style="display:none;">
+    <div id="capacityMsg"></div>
+    <div id="capacityHint" class="hint"></div>
+    <button id="goSpectator" style="display:none;">Entra come osservatore</button>
+    <button id="goNewRoom">Prova un'altra stanza</button>
+  </div>
+</div>
+
+<div id="game">
+  <canvas id="world"></canvas>
+  <canvas id="mini" width="170" height="170"></canvas>
+
+  <div class="hud" id="topbar">
+    <div class="box">
+      <span id="posBadge">-</span><span id="lapBadge">Giro -/-</span>
+    </div>
+    <div class="box statRow">
+      <span>🛞</span><div class="bar" id="tireBar"><i style="width:100%"></i></div>
+      <span>⛽</span><div class="bar" id="fuelBar"><i style="width:100%"></i></div>
+      <span>🔋</span><div class="bar" id="battBar"><i style="width:0%"></i></div>
+      <span>🔧</span><div class="bar" id="dmgBar"><i style="width:0%"></i></div>
+      <span id="drsInd">DRS</span>
+    </div>
+  </div>
+  <div class="hud" id="timerBox"><div class="box" style="flex-direction:column;gap:2px;">
+    <span id="trackNameBadge" style="font-size:.86em;color:var(--muted);letter-spacing:.08em;">—</span>
+    <span id="raceClock">00:00.0</span>
+  </div></div>
+  <div id="pitBadge">🔧 Box in corso…</div>
+  <div id="speedo">0<span> km/h</span></div>
+  <div class="hud" id="lbPanel"><h4>CLASSIFICA GARA</h4><div id="lbRows"></div></div>
+
+  <div id="countdown">
+    <div id="lights"></div>
+    <div class="num" id="cdNum"></div>
+  </div>
+  <div id="toast"></div>
+
+  <div id="pitOverlay">
+    <div class="panelBox">
+      <h2>🔧 AI BOX</h2>
+      <p class="hint">Seleziona il servizio, poi conferma. Il resto lo fanno i meccanici.</p>
+      <div class="pitOpt"><label><input type="checkbox" id="pitTires" checked> Cambio gomme (nuove)</label></div>
+      <div class="pitOpt"><label>Carburante da aggiungere</label><input type="range" id="pitFuel" min="0" max="100" value="60"><span id="pitFuelVal">60%</span></div>
+      <div class="pitOpt"><label><input type="checkbox" id="pitDamage"> Ripara danni</label></div>
+      <button id="pitConfirm" style="margin-top:10px;background:var(--red);color:#fff;border:none;padding:10px;border-radius:6px;cursor:pointer;">CONFERMA E VAI AI BOX</button>
+    </div>
+  </div>
+
+  <div id="resultsOverlay">
+    <div class="panelBox">
+      <h2 id="resTitle">CLASSIFICA GARA</h2>
+      <table class="tbl"><thead><tr><th>#</th><th>Pilota</th><th>Tempo/Stato</th><th>Punti</th></tr></thead><tbody id="resRows"></tbody></table>
+      <div id="resLate" class="hint" style="margin-top:10px;"></div>
+      <div class="hint" id="resNext" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <div id="seasonOverlay">
+    <div class="panelBox">
+      <h2 id="seasTitle">CLASSIFICA CAMPIONATO</h2>
+      <table class="tbl"><thead><tr><th>#</th><th>Pilota</th><th>Punti</th></tr></thead><tbody id="seasRows"></tbody></table>
+      <div class="hint" id="seasNext" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <div id="touchControls">
+    <div id="tcStick"><div id="tcStickKnob"></div></div>
+    <div id="tcPedals">
+      <div class="tcBtn" id="tcAccel">▲</div>
+      <div class="tcBtn" id="tcBrake">▼</div>
+    </div>
+    <div id="tcSmall">
+      <div class="tcSmallBtn" id="tcDrs">DRS</div>
+      <div class="tcSmallBtn" id="tcBoost">⚡</div>
+    </div>
+  </div>
+
+  <div id="commsBtns">
+    <button id="voiceToggleBtn" class="commsBtn" title="Attiva chat vocale">🎤</button>
+    <button id="voiceMuteBtn" class="commsBtn" title="Silenzia microfono" style="display:none">🎙️</button>
+    <button id="voiceDeafenBtn" class="commsBtn" title="Disattiva audio in arrivo">🔊</button>
+    <button id="lbToggleBtn" class="commsBtn" title="Mostra/nascondi classifica">🏆</button>
+  </div>
+  <div id="chatWrap">
+    <div id="chatLog"></div>
+    <div id="chatBar"><input id="chatInput" maxlength="120" placeholder="Messaggio… (Invio per inviare)"></div>
+  </div>
+  <div id="peerAudios"></div>
+  <div id="helpBtn">⌨️ WASD/Frecce · Shift DRS · Spazio Boost · entra in corsia box e fermati al tuo box · Invio Chat</div>
+</div>
+
+<script type="module">
+import { joinRoom, selfId } from 'https://esm.sh/trystero@0.21.1/torrent';
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const clamp = (v,a,b) => Math.max(a,Math.min(b,v));
+const lerp = (a,b,t) => a+(b-a)*t;
+const rand = (a,b) => a+Math.random()*(b-a);
+const TAU = Math.PI*2;
+function angDiff(a,b){ let d=(b-a)%TAU; if(d>Math.PI)d-=TAU; if(d<-Math.PI)d+=TAU; return d; }
+function fmtTime(s){
+  if(s==null || !isFinite(s)) return '--:--.-';
+  const m = Math.floor(s/60), sec = s-m*60;
+  return String(m).padStart(2,'0')+':'+sec.toFixed(1).padStart(4,'0');
+}
+function hashStr(s){ let h=0; for(let i=0;i<s.length;i++){ h=(Math.imul(31,h)+s.charCodeAt(i))|0; } return h; }
+
+const APP_ID = 'topgear-f1-p2p-youdev-v1';
+const CAR_SPRITE_W=125, CAR_SPRITE_H=257, CAR_SCALE=0.19;
+const TOTAL_MESH_CAP = 24;          // limite totale piloti+osservatori nella mesh P2P
+const DEFAULT_MAX_DRIVERS = 12;
+const LAPS_PER_RACE = 3;
+const TRACK_COUNT = 6;
+const POINTS_TABLE = [25,18,15,12,10,8,6,4,2,1,0,0];
+const CAPACITY_CHECK_DELAY = 900;
+// Identità di gioco: usiamo selfId di Trystero (univoco per ogni connessione/scheda), esattamente come in
+// m-asteroids. NON usiamo localStorage per l'identità di rete: è condiviso fra tutte le schede dello stesso
+// browser, quindi due finestre aperte per simulare due giocatori finirebbero per avere lo STESSO id e
+// confondersi a vicenda in griglia/classifica/giri. localStorage resta adatto solo a dati locali (es. hiscore),
+// non all'identità del pilota in gara.
+const MY_PILOT_ID = selfId;
+const COUNTDOWN_LIGHTS_MS = 4200;
+const LOBBY_AUTOSTART_MS = 16000;   // tempo massimo di attesa in griglia prima del semaforo
+const RESULTS_SHOW_MS = 13000;
+const SEASON_SHOW_MS = 17000;
+const RACE_STRAGGLER_TIMEOUT = 55;  // secondi dopo il primo arrivato, oltre cui si chiude la gara (DNF ai rimasti)
+// limite massimo assoluto di durata gara: se nessuno taglia il traguardo (es. tutti restano senza benzina),
+// la gara si chiude comunque e si stila una classifica in base a quanta pista è stata percorsa, invece di
+// annullarla. Scala sulla lunghezza reale del circuito: un tempo fisso era troppo corto sui tracciati più lunghi,
+// al punto da chiudere la gara prima ancora che si potessero completare due giri.
+function raceHardTimeoutFor(trk){
+  const assumedAvgSpeed = 130; // unità/s: stima prudente (molto più bassa della punta, per curve/frenate/box)
+  const perLap = trk.total/assumedAvgSpeed;
+  return Math.max(150, perLap*LAPS_PER_RACE*1.5 + 60);
+}
+
+// ---------- motore audio sintetizzato (nessun file da caricare) ----------
+const AudioEngine = (function(){
+  let ctx=null;
+  function ensureCtx(){ if(!ctx){ const AC=window.AudioContext||window.webkitAudioContext; ctx=new AC(); } if(ctx.state==='suspended') ctx.resume(); return ctx; }
+  function tone(freq,dur,type='sine',vol=0.2,glideTo=null){
+    try{
+      const c=ensureCtx(); const o=c.createOscillator(); const g=c.createGain();
+      o.type=type; o.frequency.setValueAtTime(freq,c.currentTime);
+      if(glideTo) o.frequency.exponentialRampToValueAtTime(Math.max(1,glideTo),c.currentTime+dur);
+      g.gain.setValueAtTime(vol,c.currentTime); g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+dur);
+      o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime+dur+0.02);
+    }catch(_){}
+  }
+  function noiseBurst(dur,vol=0.2,cutoff=1200,type='lowpass'){
+    try{
+      const c=ensureCtx(); const buf=c.createBuffer(1, c.sampleRate*dur, c.sampleRate);
+      const d=buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*(1-i/d.length);
+      const src=c.createBufferSource(); src.buffer=buf;
+      const f=c.createBiquadFilter(); f.type=type; f.frequency.value=cutoff;
+      const g=c.createGain(); g.gain.setValueAtTime(vol,c.currentTime); g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+dur);
+      src.connect(f); f.connect(g); g.connect(c.destination); src.start(); src.stop(c.currentTime+dur+0.02);
+    }catch(_){}
+  }
+  return { ensureCtx, tone, noiseBurst };
+})();
+window.addEventListener('pointerdown', ()=> AudioEngine.ensureCtx(), {once:true, capture:true});
+window.addEventListener('keydown', ()=> AudioEngine.ensureCtx(), {once:true, capture:true});
+
+// motore continuo: rombo del motore in base alla velocità del giocatore
+let engineOsc=null, engineGain=null;
+function startEngineHum(){
+  try{
+    const c=AudioEngine.ensureCtx();
+    engineOsc=c.createOscillator(); engineOsc.type='sawtooth';
+    const filt=c.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value=900;
+    engineGain=c.createGain(); engineGain.gain.value=0.0;
+    engineOsc.connect(filt); filt.connect(engineGain); engineGain.connect(c.destination);
+    engineOsc.frequency.value=60; engineOsc.start();
+  }catch(_){}
+}
+function updateEngineHum(speedFrac, throttleOn){
+  if(!engineOsc) return;
+  try{
+    engineOsc.frequency.setTargetAtTime(60+speedFrac*260, AudioEngine.ensureCtx().currentTime, 0.08);
+    engineGain.gain.setTargetAtTime(throttleOn?0.05+speedFrac*0.05:0.02, AudioEngine.ensureCtx().currentTime, 0.12);
+  }catch(_){}
+}
+
+// ---------- circuiti: definiti da pochi punti di controllo, ispirati (non riprodotti) a celebri layout reali ----------
+// Ogni tracciato viene generato da una spline chiusa Catmull-Rom passante per i punti di controllo.
+function catmullRomClosed(pts, samplesPerSeg=14){
+  const n=pts.length, out=[];
+  for(let i=0;i<n;i++){
+    const p0=pts[(i-1+n)%n], p1=pts[i], p2=pts[(i+1)%n], p3=pts[(i+2)%n];
+    for(let s=0;s<samplesPerSeg;s++){
+      const t=s/samplesPerSeg, t2=t*t, t3=t2*t;
+      const x=0.5*((2*p1[0])+(-p0[0]+p2[0])*t+(2*p0[0]-5*p1[0]+4*p2[0]-p3[0])*t2+(-p0[0]+3*p1[0]-3*p2[0]+p3[0])*t3);
+      const y=0.5*((2*p1[1])+(-p0[1]+p2[1])*t+(2*p0[1]-5*p1[1]+4*p2[1]-p3[1])*t2+(-p0[1]+3*p1[1]-3*p2[1]+p3[1])*t3);
+      out.push([x,y]);
+    }
+  }
+  return out;
+}
+
+const TRACK_DEFS = [
+  { name:'Autodromo della Brianza', theme:'#3a3d45', width:130, scale:2.1,
+    drs:[0.03,0.28], pit:[0.90,0.06],
+    pts:[[0,-560],[520,-520],[620,-400],[560,-280],[600,-200],[900,-260],[980,-60],[900,120],[600,140],
+         [560,240],[620,340],[420,460],[120,440],[-80,520],[-420,460],[-620,280],[-560,60],[-680,-140],
+         [-560,-360],[-260,-500]] },
+  { name:'Circuito del Principato', theme:'#2e3348', width:88, scale:1.7,
+    drs:[0.5,0.66], pit:[0.14,0.28],
+    pts:[[0,-380],[260,-360],[340,-240],[240,-160],[300,-80],[420,-100],[460,20],[340,80],[360,180],
+         [220,240],[240,340],[80,380],[-160,340],[-340,280],[-280,140],[-320,60],[-420,-60],[-360,-220],
+         [-180,-320]] },
+  { name:"Pista del Deserto", theme:'#4a3a26', width:150, scale:1,
+    drs:[0.02,0.24],drs2:[0.5,0.62], pit:[0.86,0.98],
+    pts:[[0,-500],[700,-460],[860,-260],[820,-40],[900,180],[700,380],[300,420],[60,340],[-160,400],
+         [-520,340],[-780,120],[-760,-160],[-560,-340],[-260,-460]] },
+  { name:'Circuito delle Ardenne', theme:'#243a2c', width:120, scale:1.45,
+    drs:[0.62,0.86], pit:[0.05,0.18],
+    pts:[[0,-460],[360,-500],[560,-380],[520,-220],[680,-140],[760,60],[660,180],[680,340],[420,440],
+         [140,380],[-120,460],[-380,360],[-460,180],[-360,20],[-480,-160],[-380,-360],[-160,-440]] },
+  { name:'Circuito Cittadino della Baia', theme:'#1e2440', width:82, scale:1,
+    drs:[0.38,0.52], pit:[0.68,0.82],
+    pts:[[0,-360],[280,-340],[420,-260],[460,-120],[420,20],[460,140],[380,240],
+         [320,280],[240,320],[0,320],[-260,320],[-360,240],[-320,120],[-400,40],[-380,-140],[-260,-260],
+         [-160,-320]] },
+  { name:'Anello di Silverwood', theme:'#333a2c', width:140, scale:1.45,
+    drs:[0.08,0.30],drs2:[0.66,0.80], pit:[0.90,0.03],
+    pts:[[0,-480],[420,-500],[680,-360],[640,-180],[820,-100],[920,80],[720,260],[500,220],[380,220],
+         [280,360],[0,420],[-320,380],[-560,240],[-620,40],[-460,-100],[-560,-300],[-320,-460]] }
+];
+
+function smoothClosed(pts, passes=2, factor=0.18){
+  let arr = pts;
+  for(let p=0;p<passes;p++){
+    const n2=arr.length;
+    arr = arr.map((pt,i)=>{
+      const prev=arr[(i-1+n2)%n2], next=arr[(i+1)%n2];
+      return [ pt[0]*(1-factor*2)+(prev[0]+next[0])*factor, pt[1]*(1-factor*2)+(prev[1]+next[1])*factor ];
+    });
+  }
+  return arr;
+}
+function circumRadius(a,b,c){
+  const ab=Math.hypot(b[0]-a[0],b[1]-a[1]), bc=Math.hypot(c[0]-b[0],c[1]-b[1]), ac=Math.hypot(c[0]-a[0],c[1]-a[1]);
+  const s=(ab+bc+ac)/2, area=Math.sqrt(Math.max(0,s*(s-ab)*(s-bc)*(s-ac)));
+  return area<1e-5 ? 1e6 : (ab*bc*ac)/(4*area);
+}
+
+function buildTrack(def, seedScale=1){
+  const scale = 1.65*(def.scale||1)*seedScale;
+  const raw = def.pts.map(p=>[p[0]*scale, p[1]*scale]);
+  const center = smoothClosed(catmullRomClosed(raw, 16), 2, 0.16);
+  const n = center.length;
+  const seg = new Array(n), cum = new Array(n+1); cum[0]=0;
+  for(let i=0;i<n;i++){
+    const a=center[i], b=center[(i+1)%n];
+    const dx=b[0]-a[0], dy=b[1]-a[1], len=Math.hypot(dx,dy)||0.0001;
+    seg[i]={dx:dx/len,dy:dy/len,len,nx:-dy/len,ny:dx/len};
+    cum[i+1]=cum[i]+len;
+  }
+  const total = cum[n];
+  const w = def.width;
+  // in curve molto strette, limitiamo la semi-larghezza al raggio di curvatura locale: altrimenti i bordi
+  // sinistro/destro (offset costante lungo la normale) si autointersecano. Non basta però limitare punto per
+  // punto: farlo senza ammorbidire crea una "strizzatura" di larghezza che cambia di scatto da un campione
+  // all'altro, e proprio quello scatto genera lo zigzag visibile nei cordoli. Quindi: prima calcoliamo il cap
+  // di sicurezza per ogni punto, poi prendiamo il minimo su una finestra di campioni vicini (mai allargarsi
+  // subito dopo un punto stretto) e infine ammorbidiamo la transizione con qualche passata di media mobile.
+  const halfWRaw = new Array(n);
+  for(let i=0;i<n;i++){
+    const r = circumRadius(center[(i-1+n)%n], center[i], center[(i+1)%n]);
+    halfWRaw[i] = Math.max(w*0.12, Math.min(w/2, r*0.86));
+  }
+  const HALFW_WIN = 9;
+  let halfW = halfWRaw.map((_,i)=>{
+    let m=Infinity;
+    for(let k=-HALFW_WIN;k<=HALFW_WIN;k++) m=Math.min(m, halfWRaw[(i+k+n)%n]);
+    return m;
+  });
+  for(let pass=0; pass<5; pass++){
+    halfW = halfW.map((v,i)=> 0.5*v + 0.25*halfW[(i-1+n)%n] + 0.25*halfW[(i+1)%n]);
+  }
+  const left = center.map((p,i)=>[p[0]+seg[i].nx*halfW[i], p[1]+seg[i].ny*halfW[i]]);
+  const right = center.map((p,i)=>[p[0]-seg[i].nx*halfW[i], p[1]-seg[i].ny*halfW[i]]);
+  // corsia box: offset esterno lungo il tratto [pit0,pit1] della pista (in frazione 0..1 del percorso),
+  // con un raccordo graduale (taper) alle due estremità così si innesta nella pista invece di restare staccata
+  function fracIdx(f){ f=((f%1)+1)%1; return Math.floor(f*n); }
+  const pit = def.pit;
+  let pi0=fracIdx(pit[0]), pi1=fracIdx(pit[1]);
+  const pitIdx=[]; { let i=pi0; while(true){ pitIdx.push(i); if(i===pi1) break; i=(i+1)%n; if(pitIdx.length>n) break; } }
+  const PIT_TAPER = 0.14;
+  const pitLane = pitIdx.map((i,k)=>{
+    const t = pitIdx.length<=1 ? 1 : k/(pitIdx.length-1);
+    const taper = Math.min(1, t/PIT_TAPER, (1-t)/PIT_TAPER);
+    const off = halfW[i] + 46*taper;
+    return [center[i][0]-seg[i].nx*off, center[i][1]-seg[i].ny*off];
+  });
+  // box assegnati: punto di arresto fisso sulla corsia box per ciascun pilota, con il garage vero e proprio
+  // spostato ulteriormente di lato (non sopra alla carreggiata della corsia)
+  const boxCount = DEFAULT_MAX_DRIVERS;
+  const boxMargin = Math.max(1, Math.floor(pitLane.length*0.22));
+  const usableLen = Math.max(1, pitLane.length - boxMargin*2);
+  // spazio fisico realmente disponibile tra un box e il successivo: su corsie box corte (circuiti piccoli/stretti)
+  // una dimensione fissa dei garage li farebbe sovrapporre, quindi la scaliamo su quanto spazio c'è davvero.
+  let usablePhysLen = 0;
+  for(let i=boxMargin; i<pitLane.length-boxMargin-1; i++){
+    usablePhysLen += Math.hypot(pitLane[i+1][0]-pitLane[i][0], pitLane[i+1][1]-pitLane[i][1]);
+  }
+  const boxSpacing = boxCount>1 ? usablePhysLen/(boxCount-1) : usablePhysLen;
+  const boxHalfSize = clamp(boxSpacing*0.38, 12, 19);
+  const boxTriggerR = clamp(boxSpacing*0.55, 20, 35);
+  const pitBoxSlots = [];
+  for(let k=0;k<boxCount;k++){
+    const t = boxCount===1 ? 0.5 : k/(boxCount-1);
+    const pos = Math.min(pitLane.length-1, Math.round(boxMargin + t*usableLen));
+    const gi = pitIdx[pos];
+    const p = pitLane[pos], p2 = pitLane[Math.min(pitLane.length-1,pos+1)];
+    const heading = Math.atan2(p2[1]-p[1], p2[0]-p[0]);
+    const garageX = p[0] - seg[gi].nx*38, garageY = p[1] - seg[gi].ny*38;
+    pitBoxSlots.push({ x:p[0], y:p[1], garageX, garageY, heading, index:k });
+  }
+  function progressOf(x,y){
+    // proiezione (a forza bruta, poco costosa: ~n punti) sul centro pista -> distanza cumulata + offset laterale con segno
+    let best=1e18, bestI=0, bestT=0;
+    for(let i=0;i<n;i++){
+      const a=center[i]; const dx=seg[i].dx, dy=seg[i].dy, L=seg[i].len;
+      const px=x-a[0], py=y-a[1];
+      let t=px*dx+py*dy; t=clamp(t,0,L);
+      const cx=a[0]+dx*t, cy=a[1]+dy*t;
+      const d=(x-cx)*(x-cx)+(y-cy)*(y-cy);
+      if(d<best){ best=d; bestI=i; bestT=t; }
+    }
+    const dist = cum[bestI]+bestT;
+    const a=center[bestI];
+    const lateral = (x-a[0])*seg[bestI].nx + (y-a[1])*seg[bestI].ny;
+    const frac = dist/total;
+    // "sono fisicamente in corsia box": non basta essere nel tratto di pista che contiene la corsia box (quel
+    // tratto lo percorre OGNI vettura a OGNI giro, restando sulla linea di gara) — bisogna essere anche spostati
+    // lateralmente, sul lato della corsia box, oltre il bordo della pista principale. Così il rilevamento è
+    // puramente fisico/posizionale, non un tasto da premere, e non scatta per chi sta semplicemente correndo.
+    const onPitLane = inRange(frac,[pit[0],pit[1]]) && lateral < -(halfW[bestI]+4) && lateral > -(halfW[bestI]+90);
+    return { dist, frac, lateral, segIdx:bestI, offTrack: Math.abs(lateral) > halfW[bestI]+16, onPitLane };
+  }
+  function pointAtFrac(f){
+    f=((f%1)+1)%1; const d=f*total;
+    let i=0; while(i<n-1 && cum[i+1]<d) i++;
+    const t=d-cum[i];
+    return { x:center[i][0]+seg[i].dx*t, y:center[i][1]+seg[i].dy*t, hx:seg[i].dx, hy:seg[i].dy, idx:i };
+  }
+  function inRange(frac, range){
+    const a=range[0], b=range[1];
+    if(a<=b) return frac>=a && frac<=b;
+    return frac>=a || frac<=b;
+  }
+  const drsZones = [def.drs, def.drs2].filter(Boolean);
+  // riquadro di inclusione per minimappa
+  let minX=1e18,maxX=-1e18,minY=1e18,maxY=-1e18;
+  for(const p of left.concat(right)){ minX=Math.min(minX,p[0]); maxX=Math.max(maxX,p[0]); minY=Math.min(minY,p[1]); maxY=Math.max(maxY,p[1]); }
+  return { def, name:def.name, theme:def.theme, width:w, center, left, right, cum, total, n,
+           pitLane, pitBoxSlots, pitStartFrac:pit[0], pitEndFrac:pit[1], boxHalfSize, boxTriggerR,
+           progressOf, pointAtFrac, inRange, drsZones,
+           bbox:{minX,maxX,minY,maxY} };
+}
+const TRACKS = TRACK_DEFS.map(d=>buildTrack(d));
+
+// ---------- lobby: nome, colore, schema di guida ----------
+  const CAR_COLORS = ['#ff3b4e','#4d6fff','#ffd24d','#4dff88','#c04dff','#ff8a4d','#ffffff','#333333','#b8860b','#ff69b4'];
+  const CAR_IMAGES_MAP = {
+    '#ff3b4e':'auto/auto_rossa.png',
+    '#4d6fff':'auto/auto_blu.png',
+    '#ffd24d':'auto/auto_gialla.png',
+    '#4dff88':'auto/auto_verde.png',
+    '#c04dff':'auto/auto_viola.png',
+    '#ff8a4d':'auto/auto_arancione.png',
+    '#ffffff':'auto/auto_bianconera.png',
+    '#333333':'auto/auto_nera.png',
+    '#b8860b':'auto/auto_nera_oro.png',
+    '#ff69b4':'auto/auto_rosa.png'
+  };
+  const carImages = {};
+  let carImagesLoaded = false;
+  (function preloadCarImages(){
+    const entries = Object.entries(CAR_IMAGES_MAP);
+    let loaded = 0;
+    for(const [color, src] of entries){
+      const img = new Image();
+      img.onload = () => { loaded++; if(loaded >= entries.length) carImagesLoaded = true; };
+      img.onerror = () => { loaded++; if(loaded >= entries.length) carImagesLoaded = true; };
+      img.src = src;
+      carImages[color] = img;
+    }
+  })();
+let chosenColor = CAR_COLORS[0];
+(function initCarPicker(){
+  const wrap=$('#carPicker');
+  CAR_COLORS.forEach((c,i)=>{
+    const d=document.createElement('div'); d.className='carOpt'+(i===0?' sel':'');
+    d.innerHTML='<img src="'+CAR_IMAGES_MAP[c]+'" alt="auto">';
+    d.onclick=()=>{ [...wrap.children].forEach(e=>e.classList.remove('sel')); d.classList.add('sel'); chosenColor=c; };
+    wrap.appendChild(d);
+  });
+})();
+let chosenScheme='kb';
+document.querySelectorAll('.schemeBtn').forEach(btn=>{
+  btn.onclick=()=>{ document.querySelectorAll('.schemeBtn').forEach(b=>b.classList.remove('sel')); btn.classList.add('sel'); chosenScheme=btn.dataset.scheme; };
+});
+if('ontouchstart' in window){
+  document.querySelectorAll('.schemeBtn').forEach(b=>b.classList.remove('sel'));
+  document.querySelector('.schemeBtn[data-scheme="touch"]').classList.add('sel'); chosenScheme='touch';
+}
+
+function showLobbyCard(which){
+  ['loginCard','connectingCard','capacityCard'].forEach(id=>{ $('#'+id).style.display = (id===which)?'flex':'none'; });
+}
+
+$('#go').onclick = () => {
+  const name = $('#name').value.trim().slice(0,14) || ('Pilota'+Math.floor(rand(10,99)));
+  const roomCode = $('#room').value.trim().toUpperCase().slice(0,20) || 'MAIN';
+  const maxDriversChoice = Math.max(2, Math.min(DEFAULT_MAX_DRIVERS, parseInt($('#maxDrivers').value,10)||DEFAULT_MAX_DRIVERS));
+  const wantSpectator = $('#wantSpectator').checked;
+  attemptJoin(name, chosenColor, roomCode, maxDriversChoice, chosenScheme, wantSpectator);
+};
+
+function attemptJoin(name, color, roomCode, maxDriversChoice, scheme, wantSpectator){
+  showLobbyCard('connectingCard');
+  $('#connectingMsg').textContent = `Connessione alla stanza «${roomCode}»…`;
+  const room = joinRoom({appId:APP_ID}, roomCode);
+  const [sendCfg, getCfg] = room.makeAction('cfg');
+  const [sendRole, getRole] = room.makeAction('role');
+
+  let learnedMaxDrivers=null, finalMaxDrivers=null, myRole=null, isCreator=false;
+  const roleProbe = new Map();
+
+  getCfg(data=>{ if(learnedMaxDrivers==null) learnedMaxDrivers=data.maxDrivers; });
+  getRole((data,peerId)=> roleProbe.set(peerId, data.role));
+  room.onPeerJoin(peerId=>{
+    if(finalMaxDrivers!=null) sendCfg({maxDrivers:finalMaxDrivers}, peerId);
+    if(myRole) sendRole({role:myRole}, peerId);
+  });
+
+  function decide(){
+    isCreator = Object.keys(room.getPeers()).length===0 && roleProbe.size===0;
+    finalMaxDrivers = isCreator ? maxDriversChoice : (learnedMaxDrivers!=null?learnedMaxDrivers:DEFAULT_MAX_DRIVERS);
+    const observerCap = Math.max(0, TOTAL_MESH_CAP - finalMaxDrivers);
+    const activeDrivers = [...roleProbe.values()].filter(r=>r==='driver').length;
+    const activeObservers = [...roleProbe.values()].filter(r=>r==='observer').length;
+
+    if(!wantSpectator && activeDrivers < finalMaxDrivers){
+      commit('driver');
+    } else if(activeObservers < observerCap){
+      if(!wantSpectator){
+        showLobbyCard('capacityCard');
+        $('#capacityMsg').innerHTML = `La griglia di «${esc(roomCode)}» è al completo (${finalMaxDrivers} piloti).`;
+        $('#capacityHint').textContent = `Puoi entrare come osservatore, oppure provare un'altra stanza.`;
+        $('#goSpectator').style.display='inline-block';
+        $('#goSpectator').onclick = () => commit('observer');
+        $('#goNewRoom').onclick = () => goElsewhere();
+      } else { commit('observer'); }
+    } else {
+      showLobbyCard('capacityCard');
+      $('#capacityMsg').innerHTML = `La stanza «${esc(roomCode)}» è completamente piena.`;
+      $('#capacityHint').textContent = `Prova un'altra stanza, oppure riprova più tardi.`;
+      $('#goSpectator').style.display='none';
+      $('#goNewRoom').onclick = () => goElsewhere();
+    }
+  }
+  function commit(role){
+    myRole=role; sendRole({role});
+    if(isCreator) sendCfg({maxDrivers:finalMaxDrivers});
+    startGame(name, color, roomCode, room, role==='observer', {sendCfg,getCfg,sendRole,getRole}, finalMaxDrivers, scheme);
+  }
+  function goElsewhere(){
+    try{ room.leave(); }catch(_){}
+    showLobbyCard('loginCard');
+    const m = roomCode.match(/^(.*?)-?(\d*)$/);
+    const base = m[1]||roomCode, nn = (parseInt(m[2],10)||1)+1;
+    $('#room').value = base+'-'+nn;
+  }
+  setTimeout(decide, CAPACITY_CHECK_DELAY);
+}
+
+// ================= GIOCO =================
+function startGame(myName, myColor, roomCode, room, isSpectator, roomNet, roomMaxDrivers, scheme){
+  $('#lobby').style.display='none';
+  $('#game').style.display='block';
+  if(scheme==='touch') $('#touchControls').style.display='block';
+
+  const canvas=$('#world'); const ctx=canvas.getContext('2d');
+  const mini=$('#mini'); const mctx=mini.getContext('2d');
+  let uiScale = 1;
+  function resize(){ canvas.width=innerWidth; canvas.height=innerHeight; uiScale = clamp(innerWidth/1400, 1.1, 2.3); }
+  resize(); window.addEventListener('resize', resize);
+
+  // ---------- zoom vista pista: rotellina del mouse o pinch a due dita (mai lo zoom del browser) ----------
+  let viewScale = 1;
+  const VIEW_SCALE_MIN=0.5, VIEW_SCALE_MAX=2.6;
+  canvas.addEventListener('wheel', e=>{
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.08 : 1/1.08;
+    viewScale = clamp(viewScale*factor, VIEW_SCALE_MIN, VIEW_SCALE_MAX);
+  }, {passive:false});
+  let pinchDist=null;
+  canvas.addEventListener('touchmove', e=>{
+    if(e.touches.length===2){
+      e.preventDefault();
+      const dx=e.touches[0].clientX-e.touches[1].clientX, dy=e.touches[0].clientY-e.touches[1].clientY;
+      const d=Math.hypot(dx,dy);
+      if(pinchDist!=null) viewScale = clamp(viewScale*(d/pinchDist), VIEW_SCALE_MIN, VIEW_SCALE_MAX);
+      pinchDist=d;
+    }
+  }, {passive:false});
+  canvas.addEventListener('touchend', e=>{ if(e.touches.length<2) pinchDist=null; });
+  canvas.addEventListener('touchcancel', ()=>{ pinchDist=null; });
+
+  startEngineHum();
+
+  // ---------- rete: azioni dati ----------
+  const [sendCar, getCar]       = room.makeAction('car');     // stato vettura ~15Hz
+  const [sendLap, getLap]       = room.makeAction('lap');     // eventi giro/traguardo
+  const [sendSeason, getSeason] = room.makeAction('season');  // sync stato campionato (host->tutti)
+  const [sendReqS, getReqS]     = room.makeAction('reqseas'); // richiesta stato a un host
+  const [sendJoinReq, getJoinReq] = room.makeAction('joinreq'); // richiesta di essere registrati in griglia/roster (solo l'host la applica)
+  const [sendChat, getChat]     = room.makeAction('chat');
+  const [sendPitFx, getPitFx]   = room.makeAction('pitfx');   // trigger sfx box per gli altri
+
+  const myPeerName = myName, myPeerColor = myColor;
+  const remoteInfo = new Map();   // peerId -> {name,color,carFile,pilotId,role}
+  const [sendIdent, getIdent] = room.makeAction('ident');
+  function broadcastIdent(target){
+    sendIdent({name:myPeerName,color:myPeerColor,carFile:CAR_IMAGES_MAP[myPeerColor]||'',pilotId:MY_PILOT_ID,role:isSpectator?'observer':'driver'}, target);
+  }
+  getIdent((data,peerId)=>{
+    const isNew = !remoteInfo.has(peerId);
+    remoteInfo.set(peerId, data);
+    if(isNew) broadcastIdent(peerId); // rispondiamo subito: garantisce la sincronizzazione anche se il primo invio dell'altro lato si fosse perso
+  });
+  room.onPeerJoin(peerId=>{
+    // invii ripetuti: al momento della connessione il canale dati potrebbe non essere ancora pronto a inviare
+    broadcastIdent(peerId);
+    setTimeout(()=>broadcastIdent(peerId), 500);
+    setTimeout(()=>broadcastIdent(peerId), 1500);
+    setTimeout(()=>broadcastIdent(peerId), 3500);
+  });
+  room.onPeerLeave(peerId=>{ remoteInfo.delete(peerId); remoteCars.delete(peerId); cleanupPeerAudio(peerId); updateVoiceAvailability(); });
+  setTimeout(()=> broadcastIdent(), 300);
+
+  // ---------- autorità "host": il peer con selfId più piccolo tra quelli presenti in stanza ----------
+  function currentHostId(){
+    const known = new Set([selfId, ...Object.keys(room.getPeers()), ...remoteInfo.keys()]);
+    return [...known].sort()[0];
+  }
+  function isHost(){ return currentHostId()===selfId; }
+
+  // ---------- stato del campionato (mirror locale, autoritativo solo se isHost()) ----------
+  let season = {
+    seasonNumber: 1,
+    trackIndex: 0,
+    phase: 'LOBBY',           // LOBBY | COUNTDOWN | RACE | RESULTS | SEASON_END
+    phaseUntil: 0,
+    countdownTarget: 0,
+    grid: [],                 // array di pilotId in ordine di griglia per la prossima gara
+    roster: {},                // pilotId -> {name,color,points,bestLap,lastResultPos}
+    lastRaceResults: null,     // {trackName, rows:[{pilotId,name,color,pos,timeStr,points,dnf}], late:[{name}]}
+    joinedDuringRace: [],       // nomi entrati durante la gara in corso
+    raceStartAt: 0,
+    version: 0
+  };
+  let seasonKnown=false;
+
+  function broadcastSeason(target){ sendSeason(season, target); }
+  getSeason((data,peerId)=>{
+    // adottiamo lo stato ricevuto se è più nuovo, oppure se non siamo noi l'autorità corrente (auto-guarigione)
+    if(!seasonKnown || data.version > season.version || (!isHost() && data.version>=season.version)){
+      season = data; seasonKnown=true; onSeasonApplied();
+    }
+  });
+  getReqS((_,peerId)=>{ if(seasonKnown) broadcastSeason(peerId); });
+  room.onPeerJoin(peerId=>{ if(seasonKnown && isHost()) setTimeout(()=>broadcastSeason(peerId), 400); });
+  sendReqS({});
+  setTimeout(()=>{ if(!seasonKnown){ seasonKnown=true; initFreshSeason(); } }, 1400);
+
+  function initFreshSeason(){
+    season = { seasonNumber:1, trackIndex:0, phase:'LOBBY', phaseUntil:0, countdownTarget:0,
+      grid:[], roster:{}, lastRaceResults:null, joinedDuringRace:[], raceStartAt:0, version:1 };
+    ensureRosterEntry();
+    onSeasonApplied();
+  }
+  // Applica (solo se isHost()) la registrazione di un pilota nel roster/griglia autoritativi. Se non siamo
+  // l'host, la mutazione locale andrebbe persa al prossimo aggiornamento ricevuto dall'host: inviamo quindi
+  // una richiesta di ingresso e aspettiamo che sia l'host a registrarci e a ridiffondere lo stato (la richiesta
+  // viene ripetuta automaticamente ogni volta che riceviamo un nuovo stato, es. con l'heartbeat periodico,
+  // finché non ci vediamo comparire in griglia/roster).
+  function applyRosterEntry(pid, name, color, spectator){
+    if(!season.roster[pid]) season.roster[pid] = {name,color,points:0,bestLap:null,lastResultPos:null};
+    else { season.roster[pid].name=name; season.roster[pid].color=color; }
+    if(!spectator && !season.grid.includes(pid) && season.phase==='LOBBY') season.grid.push(pid);
+    if(!spectator && season.phase!=='LOBBY' && !season.grid.includes(pid) && !season.joinedDuringRace.includes(name)){
+      season.joinedDuringRace.push(name);
+    }
+  }
+  function ensureRosterEntry(){
+    const registered = season.grid.includes(MY_PILOT_ID) || season.joinedDuringRace.includes(myName);
+    const missing = !season.roster[MY_PILOT_ID] || (!isSpectator && !registered);
+    if(isHost()){
+      applyRosterEntry(MY_PILOT_ID, myName, myColor, isSpectator);
+      reconcileKnownDrivers();
+    } else if(missing){
+      sendJoinReq({pilotId:MY_PILOT_ID, name:myName, color:myColor, isSpectator});
+    }
+  }
+  // Riconciliazione proattiva lato host: oltre a rispondere alle richieste di ingresso, l'host scansiona a ogni
+  // battito tutti i piloti di cui ha già ricevuto l'identità (ident) e li registra se mancanti. Questo evita che
+  // qualcuno resti fuori da griglia/roster per una richiesta di ingresso persa o arrivata in un momento sfortunato
+  // (es. proprio a cavallo dell'inizio del semaforo), che altrimenti lo farebbe partire fermo sul traguardo invece
+  // che nella propria casella di griglia.
+  function reconcileKnownDrivers(){
+    let changedAny=false;
+    for(const info of remoteInfo.values()){
+      if(info.role!=='driver' || !info.pilotId) continue;
+      const registered = season.grid.includes(info.pilotId) || season.joinedDuringRace.includes(info.name);
+      if(!season.roster[info.pilotId] || !registered){ applyRosterEntry(info.pilotId, info.name, info.color, false); changedAny=true; }
+    }
+    return changedAny;
+  }
+  getJoinReq((data)=>{
+    if(!isHost() || !seasonKnown) return;
+    applyRosterEntry(data.pilotId, data.name, data.color, data.isSpectator);
+    season.version=(season.version||0)+1; broadcastSeason(); onSeasonApplied();
+  });
+
+  ensureRosterEntry();
+
+  // ---------- fisica: parametri arcade ----------
+  const PHYS = {
+    topSpeed: 300,        // unità/s in rettilineo, pneumatici nuovi, senza DRS/boost
+    accel: 195,           // unità/s^2 a pieno gas
+    brakeDecel: 340,
+    coastDecel: 60,
+    reverseSpeed: 34,      // retromarcia: solo per sbloccarsi, non per guidare
+    maxSteerRate: 2.6,     // rad/s alla velocità di riferimento
+    steerSpeedRef: 140,
+    grip: 1.0,
+    drsSpeedMul: 1.32,
+    drsGripMul: 0.72,
+    boostAccelMul: 1.45,
+    boostSpeedMul: 1.12,
+    boostDrainPerSec: 42,
+    battRegenPerBrakeSec: 30,
+    tireWearCornerRate: 3.6,   // %/s a lateral-g massimo
+    tireWearDrsExtra: 1.4,
+    fuelBurnPerSec: 2.6,     // usato solo come consumo minimo "a folle" (motore acceso, fermo)
+    fuelLapsPerTank: 1.65,   // un pieno deve bastare per circa questi giri, su QUALSIASI circuito (si scala sulla sua lunghezza)
+    fuelBurnBoostExtra: 1.6,
+    grassSpeedMul: 0.22,   // fuoripista: forte penalità di velocità, non solo di aderenza
+    grassGripMul: 0.4,
+    collideDamage: 10,   // danno da un colpo "normale" (subito): 10 colpi esauriscono la salute (0-100)
+    pitSpeed: 235,           // quasi come in corsa: la corsia box non deve essere un collo di bottiglia
+    disabledCrawlSpeed: 45,  // in avaria si può solo arrancare, ma si deve poter comunque raggiungere i box
+    // tempi ai box: più servizi si scelgono, più a lungo si resta fermi
+    pitBoxDuration: {tires:3.1, fuelPerPct:0.052, damagePerPct:0.085, floor:2.6}
+  };
+
+  let track = TRACKS[season.trackIndex % TRACKS.length];
+
+  function newCarState(){
+    const p = track.pointAtFrac(0);
+    return {
+      x:p.x, y:p.y, heading:Math.atan2(p.hy,p.hx), speed:0,
+      steer:0, tireWear:0, fuel:100, battery:20, damage:0,
+      drs:false, drsHeld:false, boosting:false,
+      lap:0, dist:0, lastDist:0, lapDistAccum:0, lapStartAt:0, lapTimes:[], bestLap:null,
+      finished:false, finishTime:null, dnf:false,
+      inPitLane:false, pitBoxIndex:0, pitServicing:false, pitServiceTimer:0, pitServiceDone:false,
+      gridPos:0, offTrack:false, wallBounce:0, collideCooldown:0
+    };
+  }
+  let myCar = newCarState();
+  const remoteCars = new Map(); // peerId -> {state, name, color, lastSeen}
+
+  // ---------- input: tre schemi ----------
+  const keys = {};
+  window.addEventListener('keydown', e=>{
+    // se il focus è sulla chat, i tasti di guida non devono venire intercettati: altrimenti scrivere
+    // normalmente (spazi, frecce nel testo) muoverebbe anche l'auto e verrebbe "mangiato" da preventDefault.
+    if(document.activeElement===$('#chatInput') && e.key.toLowerCase()!=='enter') return;
+    keys[e.key.toLowerCase()]=true;
+    if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(e.key.toLowerCase())) e.preventDefault();
+    if(e.key.toLowerCase()==='enter'){ const inp=$('#chatInput'); if(document.activeElement!==inp){ inp.focus(); } }
+  });
+  window.addEventListener('keyup', e=>{ keys[e.key.toLowerCase()]=false; });
+  // sicurezza extra: se la chat perde/guadagna focus con tasti già premuti, evitiamo che restino "incollati"
+  $('#chatInput').addEventListener('focus', ()=>{ for(const k in keys) keys[k]=false; });
+  let mouseX=innerWidth/2, mouseY=innerHeight/2;
+  window.addEventListener('mousemove', e=>{ mouseX=e.clientX; mouseY=e.clientY; });
+  let drsToggleLatch=false, boostLatch=false;
+
+  // touch state
+  const touch = { stickActive:false, stickX:0, stickY:0, accel:false, brake:false, drs:false, boost:false, pit:false };
+  (function setupTouch(){
+    const stick=$('#tcStick'), knob=$('#tcStickKnob');
+    let stickId=null, cx=0, cy=0;
+    function start(e){ const t=e.changedTouches?e.changedTouches[0]:e; stickId=t.identifier??'m'; const r=stick.getBoundingClientRect(); cx=r.left+r.width/2; cy=r.top+r.height/2; touch.stickActive=true; move(e); }
+    function move(e){ if(!touch.stickActive) return; const t=e.changedTouches?[...e.changedTouches].find(tt=>tt.identifier===stickId):e; if(!t) return;
+      let dx=t.clientX-cx, dy=t.clientY-cy; const r=52; const len=Math.hypot(dx,dy)||1; if(len>r){ dx=dx/len*r; dy=dy/len*r; }
+      knob.style.left=(37+dx)+'px'; knob.style.top=(37+dy)+'px'; touch.stickX=dx/r; touch.stickY=dy/r; }
+    function end(){ touch.stickActive=false; touch.stickX=0; touch.stickY=0; knob.style.left='37px'; knob.style.top='37px'; }
+    stick.addEventListener('touchstart', e=>{e.preventDefault(); start(e);}, {passive:false});
+    stick.addEventListener('touchmove', e=>{e.preventDefault(); move(e);}, {passive:false});
+    stick.addEventListener('touchend', e=>{e.preventDefault(); end();}, {passive:false});
+    stick.addEventListener('mousedown', e=>start(e));
+    window.addEventListener('mousemove', e=>{ if(touch.stickActive) move(e); });
+    window.addEventListener('mouseup', ()=>{ if(touch.stickActive) end(); });
+    function btnDown(el, on){ el.addEventListener('touchstart', e=>{e.preventDefault(); on(true); el.classList.add('pressed');}, {passive:false});
+      el.addEventListener('touchend', e=>{e.preventDefault(); on(false); el.classList.remove('pressed');}, {passive:false});
+      el.addEventListener('mousedown', ()=>{on(true); el.classList.add('pressed');});
+      el.addEventListener('mouseup', ()=>{on(false); el.classList.remove('pressed');});
+      el.addEventListener('mouseleave', ()=>{on(false); el.classList.remove('pressed');}); }
+    btnDown($('#tcAccel'), v=>touch.accel=v);
+    btnDown($('#tcBrake'), v=>touch.brake=v);
+    btnDown($('#tcBoost'), v=>touch.boost=v);
+    $('#tcDrs').addEventListener('touchstart', e=>{e.preventDefault(); touch.drs=!touch.drs; $('#tcDrs').classList.toggle('pressed',touch.drs);});
+    $('#tcDrs').addEventListener('mousedown', ()=>{ touch.drs=!touch.drs; $('#tcDrs').classList.toggle('pressed',touch.drs); });
+  })();
+
+  function readInput(dt){
+    let throttle=0, brake=0, steer=0, drsToggle=false, boost=false;
+    if(scheme==='kb' || scheme==='kbm'){
+      if(keys['arrowup']||keys['w']) throttle=1;
+      if(keys['arrowdown']||keys['s']) brake=1;
+      if(scheme==='kb'){
+        if(keys['arrowleft']||keys['a']) steer=-1;
+        if(keys['arrowright']||keys['d']) steer=1;
+      } else {
+        const dx = (mouseX-innerWidth/2)/(innerWidth/2);
+        steer = clamp(dx*1.6,-1,1);
+      }
+      const drsKeyDown = keys['shift'];
+      if(drsKeyDown && !drsToggleLatch){ drsToggle=true; } drsToggleLatch=drsKeyDown;
+      boost = !!keys[' '];
+    } else { // touch
+      throttle = touch.accel?1:0; brake = touch.brake?1:0; steer = clamp(touch.stickX*1.4,-1,1);
+      if(touch.drs && !drsToggleLatch){ drsToggle=true; } drsToggleLatch=touch.drs;
+      boost = touch.boost;
+    }
+    return {throttle,brake,steer,drsToggle,boost};
+  }
+
+  // ---------- box: overlay UI ----------
+  let pendingPitService = null;
+  $('#pitFuel').addEventListener('input', ()=> $('#pitFuelVal').textContent = $('#pitFuel').value+'%');
+  $('#pitConfirm').onclick = ()=>{
+    pendingPitService = { tires:$('#pitTires').checked, fuelPct:parseInt($('#pitFuel').value,10), damage:$('#pitDamage').checked };
+    $('#pitOverlay').style.display='none';
+  };
+  function openPitMenuIfNeeded(){
+    const svc = pendingPitService || {tires:true, fuelPct:80, damage:false};
+    $('#pitTires').checked = svc.tires;
+    $('#pitFuel').value = svc.fuelPct; $('#pitFuelVal').textContent = svc.fuelPct+'%';
+    $('#pitDamage').checked = svc.damage;
+    $('#pitOverlay').style.display='flex';
+  }
+
+  function showToast(msg, ms=2200){ const t=$('#toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t.__h); t.__h=setTimeout(()=>t.style.display='none', ms); }
+
+  // ---------- fisica per-frame della vettura locale ----------
+  function updateMyCar(dt){
+    if(season.phase==='SEASON_END') return;
+    const c = myCar;
+    const inp = readInput(dt);
+
+    if(c.finished || c.dnf){
+      c.speed = Math.max(0, c.speed - PHYS.coastDecel*dt);
+      c.x += Math.cos(c.heading)*c.speed*dt; c.y += Math.sin(c.heading)*c.speed*dt;
+    }
+    else if(season.phase!=='RACE'){
+      // in griglia/paddock, semaforo non ancora verde: vettura ferma, non risponde ai comandi
+      c.speed = 0;
+    }
+    else {
+      // sterzo
+      const speedFactor = clamp(Math.abs(c.speed)/PHYS.steerSpeedRef, 0.25, 1.3);
+      const targetSteer = inp.steer;
+      c.steer = lerp(c.steer, targetSteer, clamp(dt*8,0,1));
+      const gripMul = currentGripMul(c);
+      if(!c.pitServicing) c.heading += c.steer*PHYS.maxSteerRate*speedFactor*gripMul*dt*(c.speed>=0?1:-1);
+
+      const prog = track.progressOf(c.x,c.y);
+
+      // DRS: toggle solo se in zona consentita e non troppo lento (sicurezza in curva)
+      if(inp.drsToggle){
+        const inZone = track.drsZones.some(z=>track.inRange(prog.frac,z));
+        if(inZone && !c.drs && c.speed>60){ c.drs=true; showToast('DRS attivato ➜'); }
+        else if(c.drs){ c.drs=false; }
+        else if(!inZone) showToast('DRS disponibile solo nella zona designata');
+      }
+      const inZoneNow = track.drsZones.some(z=>track.inRange(prog.frac,z));
+      if(c.drs && !inZoneNow) c.drs=false;
+
+      // boost (batteria)
+      c.boosting = inp.boost && c.battery>1 && c.fuel>0 && !c.pitServicing;
+      if(c.boosting) c.battery = Math.max(0, c.battery - PHYS.boostDrainPerSec*dt);
+
+      // ---------- corsia box: si entra SOLO dal cancello d'ingresso (inizio corsia) e si esce SOLO dal
+      // cancello d'uscita (fine corsia) — non ovunque lungo il tratto, altrimenti si può "tagliare" da metà
+      // pista alla corsia box o viceversa senza percorrerla davvero.
+      const wasInPitLane = c.inPitLane;
+      const GATE_LEN = 130; // unità di mondo: ampiezza della porta di ingresso/uscita
+      const gateFrac = GATE_LEN/track.total;
+      const entryGate = [track.pitStartFrac, (track.pitStartFrac+gateFrac)%1];
+      const exitGate = [((track.pitEndFrac-gateFrac)+1)%1, track.pitEndFrac];
+      const inPitFracRange = track.inRange(prog.frac, [track.pitStartFrac, track.pitEndFrac]);
+      const lateralPitSide = prog.lateral < -(track.width/2+4);
+      if(!c.inPitLane){
+        if(track.inRange(prog.frac, entryGate) && lateralPitSide) c.inPitLane = true;
+      } else {
+        if(track.inRange(prog.frac, exitGate) && !lateralPitSide) c.inPitLane = false;
+        else if(!inPitFracRange) c.inPitLane = false; // rete di sicurezza, non dovrebbe mai servire in condizioni normali
+      }
+      if(c.inPitLane && !wasInPitLane){
+        c.pitServiceDone=false; c.pitServicing=false; c.pitServiceTimer=0;
+        pendingPitService = { tires:true, fuelPct:80, damage:c.damage>20 }; // preimpostazione ragionevole, regolabile una volta fermi
+        $('#pitBadge').style.display='block'; $('#pitBadge').textContent = '🔧 Corsia box: fermati al box #'+(c.pitBoxIndex+1);
+        AudioEngine.tone(320,0.18,'square',0.18,240);
+      }
+      if(!c.inPitLane && wasInPitLane){
+        $('#pitBadge').style.display='none';
+        if(!c.pitServiceDone) showToast('Sei uscito dalla corsia box senza fermarti al tuo box!');
+      }
+      c.offTrack = c.inPitLane ? false : prog.offTrack;
+
+      if(c.inPitLane && !c.pitServiceDone && !c.pitServicing){
+        const slot = track.pitBoxSlots[c.pitBoxIndex];
+        const d = Math.hypot(c.x-slot.x, c.y-slot.y);
+        if(d<track.boxTriggerR && Math.abs(c.speed)<28){
+          c.pitServicing=true; c.pitServiceTimer=0; c.speed=0;
+          openPitMenuIfNeeded();
+          try{ sendPitFx({x:c.x,y:c.y}); }catch(_){}
+        }
+      }
+      if(c.pitServicing){
+        c.pitServiceTimer += dt;
+        const svc = pendingPitService || {tires:true, fuelPct:60, damage:c.damage>25};
+        const dur = (svc.tires?PHYS.pitBoxDuration.tires:0) + (svc.fuelPct*PHYS.pitBoxDuration.fuelPerPct) + (svc.damage?c.damage*PHYS.pitBoxDuration.damagePerPct:0);
+        if(c.pitServiceTimer >= Math.max(PHYS.pitBoxDuration.floor,dur)){
+          if(svc.tires) c.tireWear=0;
+          c.fuel = clamp(c.fuel+svc.fuelPct,0,100);
+          if(svc.damage) c.damage=0;
+          pendingPitService=null; c.pitServicing=false; c.pitServiceDone=true;
+          $('#pitOverlay').style.display='none';
+          $('#pitBadge').textContent='✅ Box completato: riparti quando vuoi';
+          AudioEngine.tone(520,0.15,'sine',0.2,700);
+        }
+      }
+
+      // limiti di velocità dinamici
+      const disabled = c.damage>=100; // salute esaurita: vettura fortemente compromessa, può solo arrancare fino ai box
+      if(disabled && !c.__wasDisabled){ showToast('🛑 AVARIA! Puoi solo arrancare lentamente: raggiungi i box per riparare', 3800); AudioEngine.tone(120,0.5,'sawtooth',0.25,60); }
+      c.__wasDisabled = disabled;
+      let topSpeed = PHYS.topSpeed;
+      topSpeed *= (1 - c.tireWear*0.0018) * (1 - c.damage*0.0028);
+      if(c.drs) topSpeed *= PHYS.drsSpeedMul;
+      if(c.boosting) topSpeed *= PHYS.boostSpeedMul;
+      if(c.offTrack) topSpeed *= PHYS.grassSpeedMul;
+      if(c.fuel<=0) topSpeed *= 0.55;
+      if(c.inPitLane) topSpeed = Math.min(topSpeed, PHYS.pitSpeed);
+      if(disabled) topSpeed = Math.min(topSpeed, PHYS.disabledCrawlSpeed);
+
+      let accel=0, reversing=false;
+      if(c.pitServicing){ /* fermo: servizio al box in corso */ }
+      else if(inp.throttle>0 && c.fuel>0){
+        accel = (disabled ? PHYS.accel*0.35 : PHYS.accel*(c.boosting?PHYS.boostAccelMul:1));
+      } else if(inp.brake>0){
+        if(c.speed>2){ accel=-PHYS.brakeDecel; c.battery=Math.min(100,c.battery+PHYS.battRegenPerBrakeSec*dt); }
+        else { accel=-PHYS.reverseSpeed*1.6; reversing=true; }
+      } else {
+        accel = -PHYS.coastDecel; // rilascio: rallenta fino a fermarsi, non va in retromarcia da solo
+      }
+      if(!c.pitServicing){
+        let newSpeed = c.speed + accel*dt;
+        if(!reversing && c.speed>=0 && newSpeed<0) newSpeed=0;
+        c.speed = clamp(newSpeed, -PHYS.reverseSpeed, topSpeed);
+      }
+
+      // usura gomme e carburante
+      const lateralG = Math.abs(c.steer)*clamp(c.speed/PHYS.topSpeed,0,1.4);
+      c.tireWear = clamp(c.tireWear + (PHYS.tireWearCornerRate*lateralG + (c.drs?PHYS.tireWearDrsExtra*0.3:0))*dt, 0, 100);
+      if(inp.throttle>0){
+        const distThisFrame = Math.max(0,c.speed)*dt;
+        const fuelPerUnit = 100/(PHYS.fuelLapsPerTank*track.total);
+        c.fuel = clamp(c.fuel - distThisFrame*fuelPerUnit*(c.boosting?PHYS.fuelBurnBoostExtra:1), 0, 100);
+      }
+
+      // fuoripista / danni (non si applica dentro la corsia box)
+      // fuoripista: solo penalità di velocità (già applicata sopra su topSpeed), nessun danno — il danno alla
+      // vettura arriva solo dagli urti con altre vetture, non dall'uscita di pista.
+      if(c.offTrack){ c.speed*=0.992; }
+
+      // avanzamento posizione
+      if(!c.pitServicing){
+        c.x += Math.cos(c.heading)*c.speed*dt;
+        c.y += Math.sin(c.heading)*c.speed*dt;
+      }
+
+      // muro invisibile del "canale" della corsia box: dopo aver mosso la vettura, se il movimento l'ha
+      // fatta sconfinare oltre il bordo pista/corsia box fuori dai cancelli, la ricacciamo indietro sul bordo
+      // stesso — non è più solo una regola logica (ignorabile con un movimento repentino), è un vero ostacolo.
+      if(!c.pitServicing){
+        const prog2 = track.progressOf(c.x,c.y);
+        const inPitRange2 = track.inRange(prog2.frac, [track.pitStartFrac, track.pitEndFrac]);
+        if(inPitRange2){
+          const innerWall = -(track.width/2+2);
+          const outerWall = -(track.width/2+92);
+          if(!c.inPitLane && !track.inRange(prog2.frac, entryGate) && prog2.lateral < innerWall){
+            clampCarLateral(c, prog2, innerWall); c.speed*=0.35;
+          } else if(c.inPitLane){
+            if(!track.inRange(prog2.frac, exitGate) && prog2.lateral > innerWall){ clampCarLateral(c, prog2, innerWall); c.speed*=0.35; }
+            else if(prog2.lateral < outerWall){ clampCarLateral(c, prog2, outerWall); c.speed*=0.35; }
+          }
+        }
+      }
+
+      // collisioni tra vetture: chi tampona (più indietro sul tracciato) prende danno doppio, chi viene
+      // tamponato prende danno normale — altrimenti non ci sarebbe un vero "colpevole". Un breve tempo di
+      // invulnerabilità dopo l'urto evita che lo stesso contatto continui a danneggiare per più frame di fila.
+      c.collideCooldown = Math.max(0, (c.collideCooldown||0)-dt);
+      if(!c.pitServicing && !c.inPitLane && c.collideCooldown<=0){
+        const myProgNow = track.progressOf(c.x,c.y);
+        const myTotalDist = c.lap*track.total + myProgNow.frac*track.total;
+        for(const [,r] of remoteCars){
+          const rs = r.state; if(!rs || rs.inPitLane) continue;
+          const dx=c.x-rs.x, dy=c.y-rs.y, d=Math.hypot(dx,dy);
+          if(d < 24 && d>0.01){
+            const otherTotalDist = (rs.lap||0)*track.total + (rs.dist||0)*track.total;
+            const iAmBehind = myTotalDist <= otherTotalDist;
+            const dmg = iAmBehind ? PHYS.collideDamage*2 : PHYS.collideDamage;
+            c.damage = clamp(c.damage + dmg, 0, 100);
+            c.speed *= iAmBehind ? 0.35 : 0.55;
+            // piccola spinta verso l'esterno del contatto, per non restare incastrati l'uno nell'altro
+            c.x += (dx/d)*10; c.y += (dy/d)*10;
+            c.collideCooldown = 1.1;
+            showToast(iAmBehind ? '💥 Tamponamento: colpa tua, danno doppio!' : '💥 Contatto subito da dietro');
+            AudioEngine.noiseBurst(0.22,0.22,500,'lowpass');
+            break;
+          }
+        }
+      }
+
+      // giri
+      trackLapProgress(c, dt, true);
+    }
+    if(engineOsc) updateEngineHum(clamp(Math.abs(c.speed)/PHYS.topSpeed,0,1), inp.throttle>0);
+  }
+  function clampCarLateral(c, prog, targetLateral){
+    const bestT = prog.dist - track.cum[prog.segIdx];
+    const a = track.center[prog.segIdx], b = track.center[(prog.segIdx+1)%track.n];
+    const dx=b[0]-a[0], dy=b[1]-a[1], len=Math.hypot(dx,dy)||1;
+    const tx=dx/len, ty=dy/len, nx=-ty, ny=tx;
+    const cx = a[0]+tx*bestT, cy = a[1]+ty*bestT;
+    c.x = cx + nx*targetLateral; c.y = cy + ny*targetLateral;
+  }
+  function currentGripMul(c){
+    let g=1; g *= (1 - c.tireWear*0.006);
+    if(c.drs) g *= PHYS.drsGripMul;
+    if(c.offTrack) g *= PHYS.grassGripMul;
+    return clamp(g,0.25,1.15);
+  }
+
+  // ---------- rilevazione giri ----------
+  function trackLapProgress(c, dt, racing){
+    const prog = track.progressOf(c.x,c.y);
+    c.dist = prog.frac;
+    if(!racing){ c.lastDist = prog.frac; return; }
+    // avanzamento netto (con segno) dall'ultimo campione, gestendo l'attraversamento del punto 0/1
+    let delta = prog.frac - c.lastDist;
+    if(delta < -0.5) delta += 1; else if(delta > 0.5) delta -= 1;
+    c.lapDistAccum = (c.lapDistAccum||0) + delta;
+    // attraversamento del traguardo in avanti: il giro conta solo se da quando è scattato l'ultimo è stata
+    // percorsa (quasi) l'intera pista — altrimenti un'auto potrebbe "guadagnare" giri sgusciando avanti e
+    // indietro proprio sulla linea di partenza/arrivo senza aver davvero completato il percorso.
+    if(c.lastDist>0.85 && prog.frac<0.15 && c.lapDistAccum>=0.85){
+      const now = performance.now()/1000;
+      const lapTime = c.lapStartAt? (now-c.lapStartAt) : null;
+      c.lapStartAt = now;
+      c.lap += 1;
+      c.lapDistAccum -= 1;
+      if(lapTime){ c.lapTimes.push(lapTime); if(!c.bestLap || lapTime<c.bestLap) c.bestLap=lapTime; }
+      if(c.lap>=LAPS_PER_RACE){
+        c.finished=true; c.finishTime = raceElapsed();
+        sendLap({pilotId:MY_PILOT_ID, type:'finish', lap:c.lap, time:c.finishTime, bestLap:c.bestLap});
+        showToast('🏁 TRAGUARDO!');
+        AudioEngine.tone(660,0.2,'sine',0.22,880);
+      } else {
+        sendLap({pilotId:MY_PILOT_ID, type:'lap', lap:c.lap, lapTime});
+        AudioEngine.tone(500,0.1,'triangle',0.16,760);
+      }
+    }
+    c.lastDist = prog.frac;
+  }
+  function raceElapsed(){ return season.raceStartAt ? (performance.now()/1000 - season.raceStartAt) : 0; }
+
+  const lapEventsLog = new Map(); // pilotId -> {lap, finishTime, bestLap, dnf}
+  getLap((data,peerId)=>{
+    lapEventsLog.set(data.pilotId, {...(lapEventsLog.get(data.pilotId)||{}), ...data});
+  });
+
+  // ---------- ciclo di gara guidato dall'host ----------
+  let lastHostTick=0, lastHeartbeat=0, stallTimers={};
+  let lastAnnouncedTrack = -1;
+  let lastAppliedTrackIndex = -1;
+  function onSeasonApplied(){
+    track = TRACKS[season.trackIndex % TRACKS.length];
+    const badge = $('#trackNameBadge');
+    if(badge) badge.textContent = track.name + ' · Stagione ' + season.seasonNumber + ' · Gara ' + (season.trackIndex+1) + '/' + TRACK_COUNT;
+    ensureRosterEntry();
+    if(season.trackIndex !== lastAppliedTrackIndex){
+      lastAppliedTrackIndex = season.trackIndex;
+      if(typeof myCar !== 'undefined' && myCar){
+        const p = track.pointAtFrac(0);
+        myCar.x = p.x; myCar.y = p.y; myCar.heading = Math.atan2(p.hy, p.hx);
+        myCar.lap = 0; myCar.dist = 0; myCar.lastDist = 0;
+        myCar.lapDistAccum = 0; myCar.speed = 0;
+        myCar.offTrack = false; myCar.inPitLane = false;
+        myCar.pitServicing = false; myCar.pitServiceDone = false;
+        myCar.finished = false; myCar.finishTime = null; myCar.dnf = false;
+        myCar.damage = 0; myCar.tireWear = 0; myCar.fuel = 100; myCar.battery = 20;
+        myCar.drs = false; myCar.boosting = false;
+        myCar.wallBounce = 0; myCar.collideCooldown = 0;
+        myCar.lapStartAt = performance.now()/1000;
+        myCar.__wasDisabled = false;
+        pendingPitService = null;
+        $('#pitBadge').style.display='none';
+      }
+    }
+    if(season.phase==='LOBBY'){
+      $('#resultsOverlay').style.display='none'; $('#seasonOverlay').style.display='none';
+      if(lastAnnouncedTrack!==season.trackIndex){
+        lastAnnouncedTrack=season.trackIndex;
+        showToast('🏁 Prossimo circuito: '+track.name, 4200);
+      }
+    }
+    if(season.phase==='COUNTDOWN') beginCountdownVisual();
+    if(season.phase==='RACE'){ $('#countdown').style.display='none'; }
+    if(season.phase==='RESULTS') showResultsOverlay();
+    if(season.phase==='SEASON_END') showSeasonOverlay();
+  }
+
+  // posizione/orientamento dello slot di griglia gi (0=pole), in formazione sfalsata a due colonne dietro il traguardo
+  function gridSlotFor(gi){
+    const row = Math.floor(gi/2), col = gi%2;
+    const back = track.pointAtFrac(-(row*46+18)/track.total);
+    const side = (col===0?-1:1)*17;
+    return { x: back.x + (-back.hy)*side, y: back.y + (back.hx)*side, heading: Math.atan2(back.hy, back.hx) };
+  }
+
+  function resetMyCarForGrid(){
+    if(isSpectator) return;
+    const gi = season.grid.indexOf(MY_PILOT_ID);
+    myCar = newCarState();
+    myCar.pitBoxIndex = clamp(gi>=0?gi:0, 0, track.pitBoxSlots.length-1);
+    if(gi>=0){
+      const s = gridSlotFor(gi);
+      myCar.x = s.x; myCar.y = s.y; myCar.heading = s.heading;
+      myCar.gridPos = gi+1;
+    }
+    myCar.lapStartAt = performance.now()/1000;
+    pendingPitService = null;
+    $('#pitBadge').style.display='none';
+  }
+
+  function hostTick(){
+    if(!isHost() || !seasonKnown) return;
+    const now = performance.now()/1000;
+    if(now-lastHostTick<0.4) return; lastHostTick=now;
+    if(reconcileKnownDrivers()){ season.version=(season.version||0)+1; broadcastSeason(); }
+    if(now-lastHeartbeat>3){ lastHeartbeat=now; broadcastSeason(); }
+    let changed=false;
+
+    if(season.phase==='LOBBY'){
+      if(!season.__lobbyStart) { season.__lobbyStart=now; }
+      const driversPresent = season.grid.filter(pid=> pid===MY_PILOT_ID || [...remoteInfo.values()].some(r=>r.pilotId===pid && r.role==='driver')).length;
+      if(driversPresent>=1 && now-season.__lobbyStart > LOBBY_AUTOSTART_MS/1000){
+        season.phase='COUNTDOWN'; season.countdownTarget = Date.now()+COUNTDOWN_LIGHTS_MS;
+        season.joinedDuringRace=[]; changed=true;
+      }
+    } else if(season.phase==='COUNTDOWN'){
+      if(Date.now()>=season.countdownTarget){
+        season.phase='RACE'; season.raceStartAt = performance.now()/1000; season.__raceStartWall=Date.now();
+        stallTimers={};
+        changed=true;
+      }
+    } else if(season.phase==='RACE'){
+      const drivers = season.grid;
+      const anyFinished = drivers.some(pid=> getLatestProgress(pid).finishTime!=null);
+      // un pilota che non ha ancora tagliato il traguardo è comunque "sistemato" se resta fermo (velocità
+      // trascurabile) per un tempo prolungato DOPO che qualcuno ha già finito — es. rimasto senza benzina in
+      // pista o ai box. Così si aspettano davvero tutti (anche doppiati), invece di chiudere la gara dopo un
+      // timeout fisso poco dopo il primo arrivato.
+      const STALL_SPEED = 8, STALL_TIME_NEEDED = 9;
+      for(const pid of drivers){
+        const p = getLatestProgress(pid);
+        if(p.finishTime!=null){ stallTimers[pid]=0; continue; }
+        if(anyFinished && Math.abs(p.speed)<STALL_SPEED) stallTimers[pid] = (stallTimers[pid]||0)+0.4;
+        else stallTimers[pid] = 0;
+      }
+      const allSettled = drivers.length>0 && drivers.every(pid=>{
+        const p = getLatestProgress(pid);
+        return p.finishTime!=null || (stallTimers[pid]||0)>=STALL_TIME_NEEDED;
+      });
+      const elapsed = raceElapsed();
+      // limite di tempo ragionevole come ultima rete di sicurezza: se qualcosa va storto lato rete e i controlli
+      // sopra non bastano, la gara si chiude comunque dopo un tempo massimo (scalato sulla lunghezza del
+      // circuito) e si stila la classifica in base a quanta pista è stata percorsa, invece di restare bloccata.
+      if(allSettled || elapsed>raceHardTimeoutFor(track)){
+        finalizeRace();
+        changed=true;
+      }
+    } else if(season.phase==='RESULTS'){
+      if(Date.now() >= season.phaseUntil) {
+        if((season.trackIndex+1) >= TRACK_COUNT){ season.phase='SEASON_END'; season.phaseUntil = Date.now()+SEASON_SHOW_MS; }
+        else { season.trackIndex+=1; season.phase='LOBBY'; season.__lobbyStart=null; }
+        changed=true;
+      }
+    } else if(season.phase==='SEASON_END'){
+      if(Date.now() >= season.phaseUntil){
+        const keepRoster = {}; for(const pid in season.roster){ keepRoster[pid]={...season.roster[pid], points:0}; }
+        season = { seasonNumber:season.seasonNumber+1, trackIndex:0, phase:'LOBBY', phaseUntil:0, countdownTarget:0,
+          grid:[...season.grid], roster:keepRoster, lastRaceResults:null, joinedDuringRace:[], raceStartAt:0, version:season.version+1 };
+        changed=true;
+      }
+    }
+    if(changed){ season.version=(season.version||0)+1; broadcastSeason(); onSeasonApplied(); }
+  }
+
+  // stato aggiornato (giro, distanza nel giro corrente, eventuale tempo di arrivo) di un pilota qualsiasi:
+  // il proprio per sé stessi, l'ultimo stato di rete ricevuto per un pilota remoto. Usato sia per capire quando
+  // chiudere la gara sia per stilare la classifica di chi non ha tagliato il traguardo, in base a quanta pista
+  // ha effettivamente percorso (non solo ai giri interi completati).
+  function getLatestProgress(pid){
+    if(pid===MY_PILOT_ID) return { lap:myCar.lap, dist:myCar.dist||0, finishTime:myCar.finishTime, bestLap:myCar.bestLap, speed:myCar.speed||0 };
+    for(const [peerId,r] of remoteCars){
+      const info = remoteInfo.get(peerId);
+      if(info && info.pilotId===pid) return { lap:r.state.lap||0, dist:r.state.dist||0, finishTime:r.state.finishTime, bestLap:null, speed:r.state.speed||0 };
+    }
+    const ev = lapEventsLog.get(pid);
+    return { lap: ev?ev.lap:0, dist:0, finishTime: ev?ev.finishTime:null, bestLap: ev?ev.bestLap:null, speed:0 };
+  }
+
+  function finalizeRace(){
+    const drivers = season.grid.slice();
+    const results = drivers.map(pid=>{
+      const ev = getLatestProgress(pid);
+      const dnf = ev.finishTime==null;
+      return { pilotId:pid, name:(season.roster[pid]?.name)||'Pilota', color:(season.roster[pid]?.color)||'#fff',
+               lap: ev.lap, dist: ev.dist, finishTime: ev.finishTime, dnf };
+    });
+    results.sort((a,b)=>{
+      if(a.dnf && b.dnf) return (b.lap+b.dist)-(a.lap+a.dist); // percorrenza totale (giri interi + avanzamento nel giro corrente)
+      if(a.dnf) return 1; if(b.dnf) return -1;
+      return a.finishTime-b.finishTime;
+    });
+    const rows = results.map((r,i)=>{
+      const pts = i<POINTS_TABLE.length && !r.dnf ? POINTS_TABLE[i] : 0;
+      if(!season.roster[r.pilotId]) season.roster[r.pilotId]={name:r.name,color:r.color,points:0,bestLap:null,lastResultPos:null};
+      season.roster[r.pilotId].points = (season.roster[r.pilotId].points||0)+pts;
+      season.roster[r.pilotId].lastResultPos = i+1;
+      return { pilotId:r.pilotId, name:r.name, color:r.color, pos:i+1,
+               timeStr: r.dnf? ('DNF · giro '+r.lap+' ('+Math.round(r.dist*100)+'%)') : fmtTime(r.finishTime),
+               points:pts, dnf:r.dnf };
+    });
+    season.lastRaceResults = { trackName:track.name, rows, late:[...season.joinedDuringRace] };
+    // griglia prossima gara: ordine di arrivo, poi i nuovi arrivati in coda
+    const finishedOrder = results.filter(r=>!r.dnf).map(r=>r.pilotId);
+    const dnfOrder = results.filter(r=>r.dnf).map(r=>r.pilotId);
+    const newcomers = Object.keys(season.roster).filter(pid=> !season.grid.includes(pid) );
+    season.grid = [...finishedOrder, ...dnfOrder, ...newcomers];
+    season.phase='RESULTS'; season.phaseUntil = Date.now()+RESULTS_SHOW_MS;
+    season.joinedDuringRace=[];
+  }
+
+  function beginCountdownVisual(){
+    const cd=$('#countdown'); const lights=$('#lights'); lights.innerHTML='';
+    for(let i=0;i<5;i++){ const l=document.createElement('div'); l.className='lamp'; lights.appendChild(l); }
+    cd.style.display='flex'; $('#cdNum').textContent='';
+    resetMyCarForGrid();
+    let lit=0;
+    const iv=setInterval(()=>{
+      if(lit<5){ lights.children[lit].classList.add('on'); AudioEngine.tone(300,0.08,'square',0.12,300); lit++; }
+      const remain = season.countdownTarget - Date.now();
+      if(remain<=0){ clearInterval(iv); [...lights.children].forEach(l=>l.classList.remove('on')); cd.style.display='none'; AudioEngine.tone(180,0.35,'sawtooth',0.28,900); }
+    }, COUNTDOWN_LIGHTS_MS/6);
+  }
+
+  function showResultsOverlay(){
+    const res = season.lastRaceResults; if(!res) return;
+    $('#resTitle').textContent = 'CLASSIFICA — ' + res.trackName;
+    $('#resRows').innerHTML = res.rows.map(r=>`<tr class="${r.pilotId===MY_PILOT_ID?'me':''} ${r.dnf?'dnf':''}">
+      <td>${r.pos}</td><td style="color:${esc(r.color)}">${esc(r.name)}${r.pilotId===MY_PILOT_ID?' ★':''}</td>
+      <td>${esc(r.timeStr)}</td><td>${r.points}</td></tr>`).join('');
+    $('#resLate').textContent = res.late.length ? ('Si sono uniti durante la gara (partiranno nella prossima): '+res.late.join(', ')) : '';
+    const nextIdx = (season.trackIndex+1)>=TRACK_COUNT ? null : season.trackIndex+1;
+    $('#resNext').innerHTML = nextIdx!=null ? ('🏁 <b style="color:var(--gold)">Prossimo circuito: '+esc(TRACKS[nextIdx%TRACKS.length].name)+'</b>') : '🏆 Ultima gara della stagione completata — si passa alla classifica finale…';
+    $('#resNext').style.cssText = 'margin-top:14px;font-size:1.05em;color:var(--text);';
+    $('#resultsOverlay').style.display='flex';
+    setTimeout(()=>{ $('#resultsOverlay').style.display='none'; }, RESULTS_SHOW_MS-500);
+  }
+
+  function showSeasonOverlay(){
+    const rows = Object.entries(season.roster).sort((a,b)=>b[1].points-a[1].points);
+    $('#seasTitle').textContent = 'CAMPIONE STAGIONE '+season.seasonNumber;
+    $('#seasRows').innerHTML = rows.map(([pid,r],i)=>`<tr class="${pid===MY_PILOT_ID?'me':''}"><td>${i+1}${i===0?' 🏆':''}</td>
+      <td style="color:${esc(r.color)}">${esc(r.name)}</td><td>${r.points}</td></tr>`).join('');
+    $('#seasNext').textContent = 'La nuova stagione inizia a breve, stessa griglia riparte dai punti azzerati…';
+    $('#seasonOverlay').style.display='flex';
+    setTimeout(()=>{ $('#seasonOverlay').style.display='none'; }, SEASON_SHOW_MS-500);
+  }
+
+  // ---------- HUD ----------
+  function liveOrderedCars(){
+    const list=[];
+    list.push({ pilotId:MY_PILOT_ID, name:myName, color:myColor, lap:myCar.lap, dist:myCar.dist, finishTime:myCar.finishTime, finished:myCar.finished, mine:true });
+    for(const [peerId,r] of remoteCars){
+      const info = remoteInfo.get(peerId);
+      if(!info || info.role!=='driver') continue;
+      list.push({ pilotId:info.pilotId, name:info.name, color:info.color, lap:r.state.lap||0, dist:r.state.dist||0, finishTime:r.state.finishTime, finished:r.state.finished, mine:false });
+    }
+    list.sort((a,b)=>{
+      if(a.finished && b.finished) return (a.finishTime||0)-(b.finishTime||0);
+      if(a.finished) return -1; if(b.finished) return 1;
+      if(a.lap!==b.lap) return b.lap-a.lap;
+      return b.dist-a.dist;
+    });
+    return list;
+  }
+  function updateHUD(){
+    const c=myCar;
+    $('#tireBar').firstElementChild.style.width = clamp(100-c.tireWear,0,100)+'%';
+    const fuelEl = $('#fuelBar').firstElementChild;
+    fuelEl.style.width = clamp(c.fuel,0,100)+'%';
+    fuelEl.style.opacity = c.fuel<15 ? (0.55+0.45*Math.abs(Math.sin(performance.now()/220))) : 1;
+    $('#battBar').firstElementChild.style.width = clamp(c.battery,0,100)+'%';
+    const dmgEl = $('#dmgBar').firstElementChild;
+    dmgEl.style.width = clamp(c.damage,0,100)+'%';
+    dmgEl.style.opacity = c.damage>=80 ? (0.55+0.45*Math.abs(Math.sin(performance.now()/220))) : 1;
+    const drsInd=$('#drsInd');
+    const prog=track.progressOf(c.x,c.y); const inZone=track.drsZones.some(z=>track.inRange(prog.frac,z));
+    drsInd.className = c.drs? 'active' : (inZone?'avail':'');
+    drsInd.textContent = c.drs?'DRS ON':'DRS';
+    $('#speedo').innerHTML = Math.round(Math.abs(c.speed)*3.2)+'<span> km/h</span>';
+    const order = liveOrderedCars();
+    const myIdx = order.findIndex(o=>o.mine);
+    $('#posBadge').textContent = isSpectator? '👁' : (myIdx>=0? (myIdx+1)+'°' : '-');
+    $('#lapBadge').textContent = isSpectator? 'Osservatore' : (c.damage>=100 ? '🛑 AVARIA — vai ai box' : ('Giro '+Math.min(c.lap+1,LAPS_PER_RACE)+'/'+LAPS_PER_RACE));
+    $('#raceClock').textContent = season.phase==='RACE' ? fmtTime(raceElapsed()) : (season.phase==='COUNTDOWN'?'PRONTI…':(season.phase==='LOBBY'?'IN GRIGLIA':''));
+    $('#lbRows').innerHTML = order.map((o,i)=>`<div class="row ${o.mine?'me':''}"><span style="color:${esc(o.color)}">${i+1}. ${esc(o.name)}</span><span>${o.finished?'🏁':('G'+o.lap)}</span></div>`).join('');
+  }
+
+  // ---------- rendering ----------
+  function worldToScreen(x,y){ return { sx: canvas.width/2 + (x-myCar.x)*viewScale, sy: canvas.height/2 + (y-myCar.y)*viewScale }; }
+
+  function drawTrack(){
+    ctx.save();
+    ctx.translate(canvas.width/2, canvas.height/2);
+    ctx.scale(viewScale, viewScale);
+    ctx.translate(-myCar.x, -myCar.y);
+    // erba: gradiente radiale invece di verde piatto, per un po' di profondità
+    const grassGrad = ctx.createRadialGradient(myCar.x,myCar.y,0,myCar.x,myCar.y, Math.max(canvas.width,canvas.height)/viewScale*0.85);
+    grassGrad.addColorStop(0,'#173c1d'); grassGrad.addColorStop(1,'#0e2814');
+    ctx.fillStyle=grassGrad;
+    ctx.fillRect(myCar.x-canvas.width/viewScale, myCar.y-canvas.height/viewScale, canvas.width*2/viewScale, canvas.height*2/viewScale);
+    ctx.lineJoin='round'; ctx.lineCap='round';
+    // ombra morbida sotto la pista, per staccarla visivamente dal prato
+    ctx.save();
+    ctx.beginPath();
+    track.left.forEach((p,i)=> i===0?ctx.moveTo(p[0],p[1]):ctx.lineTo(p[0],p[1]));
+    for(let i=track.right.length-1;i>=0;i--) ctx.lineTo(track.right[i][0],track.right[i][1]);
+    ctx.closePath();
+    ctx.translate(5,8);
+    ctx.fillStyle='rgba(0,0,0,.25)'; ctx.fill();
+    ctx.restore();
+    // asfalto
+    ctx.beginPath();
+    track.left.forEach((p,i)=> i===0?ctx.moveTo(p[0],p[1]):ctx.lineTo(p[0],p[1]));
+    for(let i=track.right.length-1;i>=0;i--) ctx.lineTo(track.right[i][0],track.right[i][1]);
+    ctx.closePath();
+    ctx.save();
+    ctx.clip();
+    const asphaltGrad = ctx.createLinearGradient(track.bbox.minX, track.bbox.minY, track.bbox.maxX, track.bbox.maxY);
+    asphaltGrad.addColorStop(0, track.theme);
+    asphaltGrad.addColorStop(1, track.theme);
+    ctx.fillStyle=asphaltGrad; ctx.fill();
+    // leggera vignettatura sui bordi pista per dare profondità all'asfalto
+    ctx.strokeStyle='rgba(0,0,0,.28)'; ctx.lineWidth=track.width*0.14; ctx.lineJoin='round';
+    ctx.beginPath();
+    track.left.forEach((p,i)=> i===0?ctx.moveTo(p[0],p[1]):ctx.lineTo(p[0],p[1])); ctx.closePath(); ctx.stroke();
+    ctx.beginPath();
+    track.right.forEach((p,i)=> i===0?ctx.moveTo(p[0],p[1]):ctx.lineTo(p[0],p[1])); ctx.closePath(); ctx.stroke();
+    ctx.restore();
+    ctx.strokeStyle='rgba(255,255,255,.25)'; ctx.lineWidth=3; ctx.setLineDash([14,16]); ctx.beginPath();
+    track.center.forEach((p,i)=> i===0?ctx.moveTo(p[0],p[1]):ctx.lineTo(p[0],p[1])); ctx.closePath(); ctx.stroke(); ctx.setLineDash([]);
+    // cordoli: seguono tutti i punti intermedi della curva (non una corda dritta), altrimenti nelle curve
+    // strette la corda taglia fuori dalla sagoma reale e sembra "rotta"/incrociata
+    ctx.lineWidth=8; ctx.lineJoin='round'; ctx.lineCap='round';
+    for(let i=0;i<track.n;i+=6){
+      const j=Math.min(i+5, track.n-1);
+      if(j<=i) continue;
+      ctx.strokeStyle = (Math.floor(i/6)%2===0)?'#ff3b4e':'#f2f2f2';
+      ctx.beginPath(); ctx.moveTo(track.left[i][0],track.left[i][1]);
+      for(let k=i+1;k<=j;k++) ctx.lineTo(track.left[k][0],track.left[k][1]);
+      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(track.right[i][0],track.right[i][1]);
+      for(let k=i+1;k<=j;k++) ctx.lineTo(track.right[k][0],track.right[k][1]);
+      ctx.stroke();
+    }
+    // corsia box: nastro d'asfalto proprio, più stretto, con muretto di separazione
+    ctx.strokeStyle='#22252c'; ctx.lineWidth=40; ctx.beginPath();
+    track.pitLane.forEach((p,i)=> i===0?ctx.moveTo(p[0],p[1]):ctx.lineTo(p[0],p[1])); ctx.stroke();
+    ctx.strokeStyle='rgba(255,210,77,.7)'; ctx.lineWidth=2; ctx.setLineDash([6,6]); ctx.beginPath();
+    track.pitLane.forEach((p,i)=> i===0?ctx.moveTo(p[0],p[1]):ctx.lineTo(p[0],p[1])); ctx.stroke(); ctx.setLineDash([]);
+    // linea traguardo
+    const sp=track.pointAtFrac(0);
+    ctx.save();
+    ctx.shadowColor='rgba(255,255,255,.6)'; ctx.shadowBlur=10;
+    ctx.translate(sp.x,sp.y); ctx.rotate(Math.atan2(sp.hy,sp.hx)+Math.PI/2);
+    for(let i=-4;i<4;i++){ ctx.fillStyle=(i%2===0)?'#fff':'#111'; ctx.fillRect(i*10,-3,10,6); }
+    ctx.restore();
+    // zone DRS: fascia semitrasparente lungo il tracciato, con bordi luminosi per leggibilità a colpo d'occhio
+    const drsPulse = 0.14 + Math.sin(performance.now()/450)*0.04;
+    track.drsZones.forEach(z=>{
+      const a=fracToIdx(z[0]), b=fracToIdx(z[1]);
+      ctx.beginPath(); let started=false;
+      forEachIdxInRange(a,b, i=>{ const p=track.left[i]; started?ctx.lineTo(p[0],p[1]):(ctx.moveTo(p[0],p[1]),started=true); });
+      forEachIdxInRangeRev(a,b, i=>{ const p=track.right[i]; ctx.lineTo(p[0],p[1]); });
+      ctx.closePath();
+      ctx.fillStyle=`rgba(77,227,255,${drsPulse})`; ctx.fill();
+      ctx.strokeStyle='rgba(77,227,255,.5)'; ctx.lineWidth=2; ctx.stroke();
+    });
+    drawPitBoxes();
+    if(season.phase==='LOBBY' || season.phase==='COUNTDOWN') drawGridSlots();
+    ctx.restore();
+  }
+  function fracToIdx(f){ f=((f%1)+1)%1; return Math.floor(f*track.n); }
+  function forEachIdxInRange(a,b,fn){ let i=a; let guard=0; while(true){ fn(i); if(i===b||guard++>track.n) break; i=(i+1)%track.n; } }
+  function forEachIdxInRangeRev(a,b,fn){ const seq=[]; forEachIdxInRange(a,b,i=>seq.push(i)); for(let k=seq.length-1;k>=0;k--) fn(seq[k]); }
+  function drawPitBoxes(){
+    const hs = track.boxHalfSize;
+    track.pitBoxSlots.forEach(slot=>{
+      const mine = !isSpectator && slot.index===myCar.pitBoxIndex;
+      ctx.save(); ctx.translate(slot.x,slot.y); ctx.rotate(slot.heading);
+      ctx.strokeStyle = mine ? '#ffd24d' : 'rgba(255,255,255,.4)'; ctx.lineWidth = mine?3:1.6;
+      ctx.beginPath(); ctx.moveTo(-track.width*0.18,0); ctx.lineTo(track.width*0.18,0); ctx.stroke();
+      ctx.restore();
+      ctx.save(); ctx.translate(slot.garageX,slot.garageY); ctx.rotate(slot.heading);
+      ctx.fillStyle = mine ? 'rgba(255,210,77,.30)' : 'rgba(255,255,255,.09)';
+      ctx.fillRect(-hs,-hs*0.8,hs*2,hs*1.6);
+      ctx.strokeStyle = mine ? '#ffd24d' : 'rgba(255,255,255,.35)'; ctx.lineWidth = mine?2.4:1.4;
+      ctx.strokeRect(-hs,-hs*0.8,hs*2,hs*1.6);
+      ctx.rotate(-slot.heading);
+      ctx.fillStyle= mine?'#ffd24d':'rgba(230,236,255,.7)'; ctx.font='bold '+Math.round(clamp(hs*0.68,10,14)*uiScale)+'px monospace';
+      ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(String(slot.index+1), 0, 0);
+      ctx.restore();
+    });
+  }
+  function drawGridSlots(){
+    const count = Math.min(season.grid.length, track.pitBoxSlots.length);
+    for(let gi=0; gi<count; gi++){
+      const s = gridSlotFor(gi);
+      const mine = !isSpectator && season.grid[gi]===MY_PILOT_ID;
+      ctx.save(); ctx.translate(s.x,s.y); ctx.rotate(s.heading);
+      ctx.strokeStyle = mine ? '#ffd24d' : 'rgba(255,255,255,.45)'; ctx.lineWidth = mine?2.6:1.6;
+      ctx.strokeRect(-13,-16,26,32);
+      ctx.rotate(-s.heading);
+      ctx.fillStyle = mine ? '#ffd24d' : 'rgba(230,236,255,.8)'; ctx.font='bold '+Math.round(12*uiScale)+'px monospace';
+      ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(String(gi+1), 0, 0);
+      ctx.restore();
+    }
+  }
+  function drawCar(x,y,heading,color,label,opts={}){
+    const {sx,sy} = worldToScreen(x,y);
+    if(sx<-80||sx>canvas.width+80||sy<-80||sy>canvas.height+80) return;
+    const cs = clamp(viewScale,0.7,1.6);
+    const w=CAR_SPRITE_W*CAR_SCALE, h=CAR_SPRITE_H*CAR_SCALE;
+    ctx.save(); ctx.translate(sx,sy); ctx.scale(cs,cs);
+    if(opts.offTrack || opts.grass){ ctx.fillStyle='rgba(255,255,255,.12)'; ctx.beginPath(); ctx.ellipse(-8,0,10,5,0,0,TAU); ctx.fill(); }
+    ctx.save();
+    ctx.filter='blur(2px)';
+    ctx.fillStyle='rgba(0,0,0,.4)'; ctx.beginPath(); ctx.ellipse(0,3,w*0.58,h*0.34,0,0,TAU); ctx.fill();
+    ctx.restore();
+    const pulse = 0.75+Math.sin(performance.now()/220)*0.25;
+    if(opts.drs){ ctx.strokeStyle=`rgba(77,227,255,${0.5+pulse*0.35})`; ctx.lineWidth=3/cs; ctx.beginPath(); ctx.ellipse(0,0,w*0.9,h*0.9,0,0,TAU); ctx.stroke(); }
+    if(opts.boost){ ctx.strokeStyle=`rgba(255,210,77,${0.45+pulse*0.4})`; ctx.lineWidth=5/cs; ctx.beginPath(); ctx.ellipse(0,0,w*1.0,h*1.0,0,0,TAU); ctx.stroke(); }
+    const img = carImages[color];
+    if(img && img.complete && img.naturalWidth > 0){
+      ctx.save(); ctx.rotate(heading+Math.PI/2);
+      ctx.drawImage(img, -w/2, -h/2, w, h);
+      ctx.restore();
+    } else {
+      ctx.save(); ctx.rotate(heading);
+      ctx.fillStyle=color; ctx.beginPath(); ctx.moveTo(15,0); ctx.lineTo(-11,-8); ctx.lineTo(-7,0); ctx.lineTo(-11,8); ctx.closePath(); ctx.fill();
+      ctx.fillStyle='#111'; ctx.fillRect(-9,-9,7,4); ctx.fillRect(-9,5,7,4); ctx.fillRect(6,-9,6,4); ctx.fillRect(6,5,6,4);
+      ctx.restore();
+    }
+    ctx.restore();
+    if(label){ ctx.fillStyle='rgba(230,236,255,.9)'; ctx.font='bold '+Math.round(12*uiScale)+'px monospace'; ctx.textAlign='center'; ctx.fillText(label, sx, sy-22*cs*uiScale); }
+  }
+  function drawPitCrew(){
+    // meccanici animati per ogni vettura attualmente in servizio al box
+    const now = performance.now()/1000;
+    const all=[{x:myCar.x,y:myCar.y,pitServicing:myCar.pitServicing}, ...[...remoteCars.values()].map(r=>{
+      const ip=interpCarPos(r,now); return {x:ip.x, y:ip.y, pitServicing:r.state.pitServicing};
+    })];
+    for(const c of all){
+      if(!c.pitServicing) continue;
+      const {sx,sy}=worldToScreen(c.x,c.y);
+      const t=performance.now()/1000;
+      for(let i=0;i<4;i++){
+        const ang = i*(TAU/4)+t*2.6;
+        const wx = sx+Math.cos(ang)*20, wy = sy+Math.sin(ang)*14;
+        ctx.fillStyle='#ffd24d'; ctx.beginPath(); ctx.arc(wx,wy,3.4,0,TAU); ctx.fill();
+      }
+      ctx.strokeStyle='rgba(77,227,255,.7)'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(sx-24,sy); ctx.lineTo(sx-14,sy); ctx.stroke();
+    }
+  }
+  function drawMini(){
+    mctx.clearRect(0,0,mini.width,mini.height);
+    const bb=track.bbox; const pad=10;
+    const sx = (mini.width-2*pad)/(bb.maxX-bb.minX), sy=(mini.height-2*pad)/(bb.maxY-bb.minY);
+    const s = Math.min(sx,sy);
+    function tp(x,y){ return [ pad+(x-bb.minX)*s, pad+(y-bb.minY)*s ]; }
+    const now = performance.now()/1000;
+    mctx.strokeStyle='rgba(255,255,255,.5)'; mctx.lineWidth=3; mctx.beginPath();
+    track.center.forEach((p,i)=>{ const [x,y]=tp(p[0],p[1]); i===0?mctx.moveTo(x,y):mctx.lineTo(x,y); }); mctx.closePath(); mctx.stroke();
+    const [mx,my]=tp(myCar.x,myCar.y); mctx.fillStyle=myColor; mctx.beginPath(); mctx.arc(mx,my,4,0,TAU); mctx.fill();
+    for(const [,r] of remoteCars){ const ip=interpCarPos(r,now); const [rx,ry]=tp(ip.x,ip.y); mctx.fillStyle=r.color; mctx.beginPath(); mctx.arc(rx,ry,3,0,TAU); mctx.fill(); }
+  }
+
+  // ---------- effetti particellari (coordinate MONDO: vanno disegnati dentro il transform world->screen) ----------
+  function drawBoostFx(wx, wy, heading, t, big){
+    const boostIntensity = (big?0.8:0.7) + Math.sin(t*(big?18:15))*(big?0.2:0.3);
+    const glowSize = (big?45:35) + Math.sin(t*(big?14:12))*(big?10:8);
+    const gradient = ctx.createRadialGradient(wx, wy, 0, wx, wy, glowSize);
+    if(big){
+      gradient.addColorStop(0, `rgba(255,220,80,${0.8*boostIntensity})`);
+      gradient.addColorStop(0.3, `rgba(255,120,30,${0.5*boostIntensity})`);
+      gradient.addColorStop(0.7, `rgba(255,50,0,${0.2*boostIntensity})`);
+      gradient.addColorStop(1, 'rgba(255,0,0,0)');
+    } else {
+      gradient.addColorStop(0, `rgba(255,200,50,${0.6*boostIntensity})`);
+      gradient.addColorStop(0.4, `rgba(255,100,20,${0.3*boostIntensity})`);
+      gradient.addColorStop(1, 'rgba(255,50,0,0)');
+    }
+    ctx.fillStyle = gradient;
+    ctx.beginPath(); ctx.arc(wx, wy, glowSize, 0, TAU); ctx.fill();
+
+    const sparkCount = big?12:8;
+    for(let i=0; i<sparkCount; i++){
+      const angle = heading + Math.PI + (Math.random()-0.5)*(big?1.0:0.8);
+      const dist = (big?18:15) + Math.random()*(big?35:25);
+      const px = wx + Math.cos(angle)*dist;
+      const py = wy + Math.sin(angle)*dist;
+      const size = (big?5:4) + Math.random()*(big?8:6);
+      const alpha = (big?0.7:0.6) + Math.random()*(big?0.3:0.4);
+      if(big){
+        const c = Math.random();
+        ctx.fillStyle = c<0.4 ? `rgba(255,255,100,${alpha})` : c<0.7 ? `rgba(255,150,0,${alpha})` : `rgba(255,80,0,${alpha})`;
+      } else {
+        ctx.fillStyle = `rgba(255,${150+Math.random()*100},0,${alpha})`;
+      }
+      ctx.beginPath(); ctx.arc(px, py, size, 0, TAU); ctx.fill();
+    }
+    const trailLen = big?70:50, trailSteps = big?8:5;
+    for(let i=0; i<trailSteps; i++){
+      const trailX = wx - Math.cos(heading)*(trailLen - i*(big?9:10));
+      const trailY = wy - Math.sin(heading)*(trailLen - i*(big?9:10));
+      const trailSize = (big?12:8) - i*(big?1.3:1.2);
+      const trailAlpha = (big?0.7:0.5) - i*(big?0.08:0.1);
+      ctx.fillStyle = big ? (i<3 ? `rgba(255,255,150,${trailAlpha})` : `rgba(255,180,50,${trailAlpha*0.7})`) : `rgba(255,200,50,${trailAlpha})`;
+      ctx.beginPath(); ctx.arc(trailX, trailY, trailSize, 0, TAU); ctx.fill();
+    }
+    if(big){
+      ctx.strokeStyle = `rgba(255,200,50,${0.6*boostIntensity})`;
+      ctx.lineWidth = 3/Math.max(0.5,viewScale);
+      ctx.beginPath(); ctx.arc(wx, wy, glowSize*1.2, 0, TAU); ctx.stroke();
+    }
+  }
+  function drawSpeedTrail(wx, wy, heading, speed){
+    const trailAlpha = clamp((speed-150)/150,0,1) * 0.4;
+    ctx.fillStyle = `rgba(255,255,255,${trailAlpha})`;
+    ctx.beginPath(); ctx.arc(wx-Math.cos(heading)*20, wy-Math.sin(heading)*20, 7, 0, TAU); ctx.fill();
+  }
+  function drawDamageSmoke(wx, wy, heading, damage){
+    const smokeAlpha = clamp((damage-60)/40,0,1) * 0.5;
+    ctx.fillStyle = `rgba(80,80,80,${smokeAlpha})`;
+    ctx.beginPath(); ctx.arc(wx-Math.cos(heading)*15, wy-Math.sin(heading)*15, 9+Math.random()*5, 0, TAU); ctx.fill();
+  }
+  function drawOffTrackDirt(wx, wy){
+    ctx.fillStyle = 'rgba(139,90,43,0.55)';
+    for(let k=0; k<4; k++){
+      ctx.beginPath(); ctx.arc(wx+(Math.random()-0.5)*24, wy+(Math.random()-0.5)*24, 3+Math.random()*4, 0, TAU); ctx.fill();
+    }
+  }
+
+  function render(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    drawTrack();
+    const now = performance.now()/1000;
+    const t = now;
+    // BUGFIX: gli effetti particellari (boost/scie/fumo/sterrato) usano coordinate di MONDO (x/y vetture),
+    // quindi vanno disegnati dentro lo stesso transform world->screen usato per la pista, non dopo che
+    // drawTrack() lo ha già annullato con ctx.restore() — altrimenti compaiono nel punto sbagliato dello
+    // schermo invece che intorno alla vettura.
+    ctx.save();
+    ctx.translate(canvas.width/2, canvas.height/2);
+    ctx.scale(viewScale, viewScale);
+    ctx.translate(-myCar.x, -myCar.y);
+    for(const [,r] of remoteCars){
+      const ip = interpCarPos(r, now);
+      if(r.state.boosting) drawBoostFx(ip.x, ip.y, ip.heading, t, false);
+      if(r.state.speed > 150 && !r.state.boosting) drawSpeedTrail(ip.x, ip.y, ip.heading, r.state.speed);
+      if(r.state.damage > 60) drawDamageSmoke(ip.x, ip.y, ip.heading, r.state.damage);
+      if(r.state.offTrack) drawOffTrackDirt(ip.x, ip.y);
+    }
+    if(!isSpectator){
+      if(myCar.boosting) drawBoostFx(myCar.x, myCar.y, myCar.heading, t, true);
+      if(myCar.speed > 150 && !myCar.boosting) drawSpeedTrail(myCar.x, myCar.y, myCar.heading, myCar.speed);
+      if(myCar.damage > 60) drawDamageSmoke(myCar.x, myCar.y, myCar.heading, myCar.damage);
+      if(myCar.offTrack) drawOffTrackDirt(myCar.x, myCar.y);
+    }
+    ctx.restore();
+
+    for(const [,r] of remoteCars){
+      const ip = interpCarPos(r, now);
+      drawCar(ip.x, ip.y, ip.heading, r.color, r.name, {offTrack:r.state.offTrack, drs:r.state.drs, boost:r.state.boosting});
+    }
+    if(!isSpectator){
+      drawCar(myCar.x,myCar.y,myCar.heading,myColor,myName,{offTrack:myCar.offTrack,drs:myCar.drs,boost:myCar.boosting});
+    }
+    drawPitCrew();
+    drawMini();
+  }
+
+  // ---------- chat testuale ----------
+  function pushChatLine(text, color='#9db0da', italic=false){
+    const log=$('#chatLog'); const d=document.createElement('div');
+    d.style.color=color; if(italic) d.style.fontStyle='italic';
+    d.textContent=text; log.appendChild(d); log.scrollTop=log.scrollHeight;
+    while(log.children.length>60) log.removeChild(log.firstChild);
+  }
+  getChat((data,peerId)=>{
+    const info=remoteInfo.get(peerId);
+    pushChatLine((info?info.name:'???')+': '+data.text, info?info.color:'#fff');
+  });
+  $('#chatInput').addEventListener('keydown', e=>{
+    if(e.key==='Enter'){
+      const v=$('#chatInput').value.trim();
+      if(v){ sendChat({text:v}); pushChatLine('Tu: '+v, myColor); }
+      $('#chatInput').value=''; $('#chatInput').blur();
+    }
+    e.stopPropagation();
+  });
+  pushChatLine('Benvenuto in stanza «'+roomCode+'»! Buona gara.', '#ffd24d', true);
+
+  // ---------- chat vocale P2P ----------
+  let localVoiceStream=null, voiceActive=false, voiceMuted=false, voiceDeafened=false;
+  const peerAudioEls = new Map();
+  const MAX_VOICE_PEOPLE = 14;
+  function updateVoiceAvailability(){
+    const btn=$('#voiceToggleBtn');
+    const total = Object.keys(room.getPeers()).length+1;
+    if(total>MAX_VOICE_PEOPLE){ if(voiceActive) disableVoice(); btn.disabled=true; btn.title='Troppi partecipanti per la chat vocale ('+MAX_VOICE_PEOPLE+' max)'; }
+    else { btn.disabled=false; btn.title = voiceActive?'Disattiva chat vocale':'Attiva chat vocale (microfono)'; }
+  }
+  async function enableVoice(){
+    if(voiceActive) return; let stream;
+    try{ stream = await navigator.mediaDevices.getUserMedia({audio:true,video:false}); }
+    catch(_){ pushChatLine('Microfono non disponibile o permesso negato.', '#ff4d4d', true); return; }
+    localVoiceStream=stream; voiceActive=true; voiceMuted=false;
+    room.addStream(stream);
+    $('#voiceToggleBtn').classList.add('active'); $('#voiceToggleBtn').title='Disattiva chat vocale';
+    const mb=$('#voiceMuteBtn'); mb.style.display='inline-block'; mb.classList.remove('muted');
+  }
+  function disableVoice(){
+    if(!voiceActive) return;
+    try{ room.removeStream(localVoiceStream); }catch(_){}
+    if(localVoiceStream) localVoiceStream.getTracks().forEach(t=>t.stop());
+    localVoiceStream=null; voiceActive=false; voiceMuted=false;
+    $('#voiceToggleBtn').classList.remove('active'); $('#voiceToggleBtn').title='Attiva chat vocale (microfono)';
+    $('#voiceMuteBtn').style.display='none';
+  }
+  $('#voiceToggleBtn').onclick = ()=> voiceActive?disableVoice():enableVoice();
+  $('#voiceMuteBtn').onclick = ()=>{
+    if(!voiceActive) return; voiceMuted=!voiceMuted;
+    localVoiceStream.getAudioTracks().forEach(t=>t.enabled=!voiceMuted);
+    $('#voiceMuteBtn').classList.toggle('muted', voiceMuted);
+  };
+  $('#voiceDeafenBtn').onclick = ()=>{
+    voiceDeafened=!voiceDeafened;
+    for(const [,e] of peerAudioEls){ if(e.audio) e.audio.muted=voiceDeafened; }
+    $('#voiceDeafenBtn').classList.toggle('active', voiceDeafened);
+  };
+  room.onPeerStream((stream,peerId)=>{
+    cleanupPeerAudio(peerId);
+    const audio=document.createElement('audio'); audio.autoplay=true; audio.srcObject=stream; audio.muted=voiceDeafened;
+    $('#peerAudios').appendChild(audio); peerAudioEls.set(peerId,{audio});
+  });
+  function cleanupPeerAudio(peerId){ const e=peerAudioEls.get(peerId); if(e){ e.audio.remove(); peerAudioEls.delete(peerId); } }
+  $('#lbToggleBtn').onclick = ()=>{ const p=$('#lbPanel'); p.style.display = p.style.display==='none'?'block':'none'; };
+
+  // ---------- rete: ricezione stato vetture remote ----------
+  // Come in m-asteroids: bufferizziamo un piccolo storico di posizioni per ogni pilota remoto invece di
+  // sovrascrivere solo l'ultimo dato ricevuto. In rendering disegneremo sempre un punto interpolato tra due
+  // pacchetti realmente arrivati (con un piccolo ritardo fisso), non l'ultimo pacchetto grezzo: è quello scatto
+  // "un pacchetto = un salto di posizione" a dare l'effetto a scatti quando i pacchetti arrivano ogni ~66ms
+  // ma il rendering è a 60fps.
+  const INTERP_DELAY = 0.12;
+  function pushCarSample(r, data, t){
+    const sample = {x:data.x, y:data.y, heading:data.heading, t};
+    const last = r.buf[r.buf.length-1];
+    const jump = last ? Math.hypot(sample.x-last.x, sample.y-last.y) : 0;
+    if(jump>260){ r.buf=[sample]; } // salto troppo ampio per un movimento normale (reset griglia/box): ripartiamo puliti
+    else { r.buf.push(sample); while(r.buf.length>2 && t-r.buf[0].t>0.9) r.buf.shift(); }
+  }
+  function interpCarPos(r, now){
+    const buf=r.buf;
+    if(!buf || buf.length===0) return {x:r.state.x, y:r.state.y, heading:r.state.heading};
+    if(buf.length===1) return {x:buf[0].x, y:buf[0].y, heading:buf[0].heading};
+    const renderTime = now - INTERP_DELAY;
+    const lastIdx = buf.length-1;
+    if(renderTime<=buf[0].t) return {x:buf[0].x, y:buf[0].y, heading:buf[0].heading};
+    if(renderTime>=buf[lastIdx].t){
+      // storico esaurito (pacchetto in ritardo): estrapoliamo brevemente dall'ultima velocità nota, poi ci si ferma
+      const a=buf[lastIdx-1], b=buf[lastIdx];
+      const span=b.t-a.t, extra=Math.min(renderTime-b.t, 0.25);
+      if(span<0.001) return {x:b.x,y:b.y,heading:b.heading};
+      const vx=(b.x-a.x)/span, vy=(b.y-a.y)/span;
+      return {x:b.x+vx*extra, y:b.y+vy*extra, heading:b.heading};
+    }
+    for(let i=0;i<lastIdx;i++){
+      if(buf[i].t<=renderTime && renderTime<=buf[i+1].t){
+        const a=buf[i], b=buf[i+1];
+        const span=b.t-a.t, alpha = span>0.001 ? (renderTime-a.t)/span : 1;
+        return { x:a.x+(b.x-a.x)*alpha, y:a.y+(b.y-a.y)*alpha, heading:a.heading+angDiff(a.heading,b.heading)*alpha };
+      }
+    }
+    return {x:buf[lastIdx].x, y:buf[lastIdx].y, heading:buf[lastIdx].heading};
+  }
+  getCar((data,peerId)=>{
+    const info=remoteInfo.get(peerId) || {name:'Pilota',color:'#fff',pilotId:peerId,role:'driver'};
+    const t = performance.now()/1000;
+    let r = remoteCars.get(peerId);
+    if(!r){ r = { state:data, name:info.name, color:info.color, lastSeen:performance.now(), buf:[] }; remoteCars.set(peerId, r); }
+    pushCarSample(r, data, t);
+    r.state=data; r.name=info.name; r.color=info.color; r.lastSeen=performance.now();
+  });
+  getPitFx((data,peerId)=>{ AudioEngine.noiseBurst(0.4,0.12,900,'lowpass'); });
+
+  // ---------- loop principale ----------
+  // La simulazione (fisica, invio rete, autorità host) gira su un setInterval indipendente da
+  // requestAnimationFrame: i browser sospendono rAF quasi subito quando una scheda perde il focus, e se
+  // capitava di essere sulla scheda che in quel momento fa da "host" della stanza, l'intera gara si bloccava
+  // per tutti finché non si tornava su quella scheda. setInterval continua a girare (anche se più lento nelle
+  // schede tenute in background a lungo) così partita e rete restano vive passando da un pilota all'altro.
+  let lastT = performance.now();
+  let lastNetSend = 0;
+  function tick(){
+    const now = performance.now();
+    const dt = Math.min(0.1, (now-lastT)/1000); lastT=now;
+    hostTick();
+    if(!isSpectator) updateMyCar(dt);
+    if(now-lastNetSend>66){
+      lastNetSend=now;
+      if(!isSpectator) sendCar({ x:myCar.x,y:myCar.y,heading:myCar.heading,speed:myCar.speed,
+        lap:myCar.lap, dist:myCar.dist, finished:myCar.finished, finishTime:myCar.finishTime,
+        drs:myCar.drs, boosting:myCar.boosting, offTrack:myCar.offTrack,
+        inPitLane:myCar.inPitLane, pitServicing:myCar.pitServicing, pitBoxIndex:myCar.pitBoxIndex });
+    }
+    // pulizia vetture remote silenti
+    for(const [pid,r] of remoteCars){ if(now-r.lastSeen>8000) remoteCars.delete(pid); }
+  }
+  setInterval(tick, 33);
+  tick();
+
+  function renderLoop(){
+    render();
+    updateHUD();
+    requestAnimationFrame(renderLoop);
+  }
+  requestAnimationFrame(renderLoop);
+  updateVoiceAvailability();
+  room.onPeerJoin(()=> setTimeout(updateVoiceAvailability,300));
+  room.onPeerLeave(()=> updateVoiceAvailability());
+}
+</script>
+</body>
+</html>
