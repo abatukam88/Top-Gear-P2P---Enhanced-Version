@@ -1,194 +1,73 @@
 # Top Gear P2P - Versione Personalizzata
 
-> Una versione personale ed estesa del progetto **Top Gear P2P**, realizzata come esercizio di studio e sperimentazione, con l'aggiunta di nuove funzionalità grafiche e miglioramenti al gameplay.
+Questa repository contiene una mia versione del progetto **Top Gear P2P**, sviluppata a partire dal progetto originale di **1001 Avventura**.
 
----
+L'obiettivo è stato quello di sperimentare nuove idee, migliorare la grafica e imparare nuove tecniche di sviluppo in HTML5 Canvas e JavaScript.
 
-# Crediti
+## Progetto originale
 
 Il progetto originale è stato realizzato da **1001 Avventura**.
 
-📺 Canale YouTube:
+📺 Canale YouTube  
 https://www.youtube.com/@1001avventura
 
-🎥 Video originale del progetto:
+🎥 Video del progetto originale  
 https://www.youtube.com/watch?v=Ch1WsS0INRQ&t=1042s
 
-Questa repository **non vuole sostituire il progetto originale**, ma rappresenta una versione modificata e personale sviluppata per approfondire lo studio di HTML5 Canvas, JavaScript e delle tecniche di sincronizzazione multiplayer tramite Trystero.
-
-Se siete interessati al progetto originale vi consiglio di seguire il canale YouTube e il video da cui tutto è iniziato.
+Questa repository contiene esclusivamente una versione personale con modifiche e miglioramenti.
 
 ---
 
-# Obiettivo
+# Principali modifiche
 
-L'obiettivo di questa versione è stato quello di espandere il progetto originale introducendo nuove funzionalità, miglioramenti grafici e alcune ottimizzazioni mantenendo invariata la struttura principale del gioco.
-
----
-
-# Miglioramenti introdotti
-
-## 🚗 Sistema di vetture con sprite
-
-Nel progetto originale le automobili vengono disegnate direttamente tramite Canvas.
-
-In questa versione sono state sostituite con sprite PNG.
-
-Sono stati aggiunti:
-
-- rendering tramite immagini
-- sistema di scala degli sprite
-- rotazione corretta delle vetture
-- qualità grafica superiore
+- Sostituzione delle auto disegnate con **sprite PNG**
+- Nuovo selettore delle vetture
+- Sincronizzazione della vettura tra tutti i giocatori
+- Miglioramenti grafici
+- Nuovi effetti (Boost, DRS, Glow)
+- Rendering delle auto completamente rivisto
+- Miglioramenti ai box
+- Miglior gestione dello spawn
+- Ottimizzazioni e pulizia del codice
 
 ---
 
-## 🎨 Selezione della vettura
+# Strumenti utilizzati
 
-La versione originale permette solamente di scegliere il colore dell'auto.
+Per la realizzazione di questa versione sono stati utilizzati diversi strumenti di Intelligenza Artificiale come supporto allo sviluppo.
 
-In questa versione è stato introdotto un vero selettore di vetture.
+- **Gemini** per la generazione delle immagini e degli sprite.
+- **ChatGPT** per la scrittura dei prompt e come supporto durante lo sviluppo.
+- **Kimi K2**, **Qwen** e **Claude AI** come assistenza nella programmazione e nella risoluzione di alcuni problemi del codice.
 
-Caratteristiche:
-
-- miniature delle auto
-- scelta del modello
-- interfaccia migliorata
-- maggiore personalizzazione
+Tutto il codice è stato comunque verificato, adattato e integrato manualmente.
 
 ---
 
-## 🌐 Multiplayer migliorato
-
-Ora il modello della vettura viene sincronizzato automaticamente con tutti i giocatori collegati.
-
-Sono sincronizzati anche:
-
-- modello della vettura
-- sprite utilizzato
-- aspetto del giocatore
-
-Ogni partecipante vede quindi l'auto corretta invece di una semplice forma disegnata.
-
----
-
-## ✨ Nuovi effetti grafici
-
-Sono stati aggiunti diversi effetti visivi.
-
-Tra questi:
-
-- effetto luminoso del Boost
-- miglioramenti visivi del DRS
-- ombre
-- glow
-- rendering più moderno
-- HUD migliorata
-
----
-
-## 🏁 Rendering completamente riscritto
-
-La funzione che disegna le vetture è stata quasi completamente riscritta.
-
-### Versione originale
-
-- forme Canvas
-- triangoli
-- rettangoli
-
-### Versione modificata
-
-- sprite PNG
-- rotazione
-- scala
-- ombre
-- glow
-- effetti grafici
-
----
-
-## 🛠 Miglioramenti ai box
-
-Sono stati modificati alcuni parametri relativi all'ingresso nella pit lane.
-
-In particolare:
-
-- area di rilevamento più ampia
-- ingresso ai box più semplice
-- esperienza di gioco più fluida
-
----
-
-## 🏎 Miglioramenti ai circuiti
-
-Sono stati aggiunti alcuni miglioramenti alla gestione della pista.
-
-Ad esempio:
-
-- spawn più affidabile
-- riposizionamento automatico
-- migliore gestione del cambio circuito
-
----
-
-## 🎮 Miglioramenti generali
-
-Sono state introdotte numerose piccole ottimizzazioni.
-
-Tra queste:
-
-- miglior rendering
-- migliore gestione degli sprite
-- ottimizzazioni del codice
-- piccole modifiche al gameplay
-- rifiniture dell'interfaccia
-
----
-
-# Confronto
-
-| Funzionalità | Versione originale | Questa versione |
-|--------------|-------------------|-----------------|
-| Auto disegnate con Canvas | ✅ | ❌ |
-| Auto tramite sprite PNG | ❌ | ✅ |
-| Selezione della vettura | ❌ | ✅ |
-| Sincronizzazione della vettura nel multiplayer | ❌ | ✅ |
-| Effetti Boost | ❌ | ✅ |
-| Effetti DRS migliorati | ❌ | ✅ |
-| Rendering avanzato | ❌ | ✅ |
-| Spawn migliorato | ❌ | ✅ |
-| Box più permissivi | ❌ | ✅ |
-
----
-
-# Tecnologie utilizzate
+# Tecnologie
 
 - HTML5
 - CSS3
 - JavaScript
 - HTML5 Canvas
 - Trystero P2P
-- Sprite PNG
 
 ---
 
-# Finalità del progetto
+# Scopo del progetto
 
-Questa repository nasce esclusivamente per:
+Questo progetto è stato realizzato esclusivamente a scopo didattico e di sperimentazione, per approfondire:
 
-- studio personale;
-- sperimentazione;
-- apprendimento di JavaScript e Canvas;
-- sperimentazione della grafica tramite sprite;
-- approfondimento del multiplayer peer-to-peer.
-
-Non rappresenta il progetto originale ma una sua evoluzione sviluppata a scopo didattico.
+- HTML5 Canvas
+- JavaScript
+- Multiplayer Peer-to-Peer
+- Gestione degli sprite
+- Rendering 2D
 
 ---
 
 # Ringraziamenti
 
-Un sentito ringraziamento a **1001 Avventura** per aver condiviso gratuitamente il progetto originale e il relativo tutorial, che hanno rappresentato la base di studio per questa versione personalizzata.
+Un ringraziamento a **1001 Avventura** per aver pubblicato gratuitamente il progetto originale e il relativo tutorial, che hanno rappresentato un'ottima base di studio.
 
-Se non avete ancora visto il progetto originale, vi consiglio di recuperare il video e di iscrivervi al canale YouTube.
+Se il progetto vi interessa, vi consiglio di guardare il video originale e di iscrivervi al canale YouTube.
