@@ -1,50 +1,61 @@
 # Top Gear P2P - Versione Personalizzata
 
-Questa repository contiene una mia versione del progetto **Top Gear P2P**, sviluppata a partire dal progetto originale di **1001 Avventura**.
+🎮 **Gioca direttamente dal browser**
 
-L'obiettivo è stato quello di sperimentare nuove idee, migliorare la grafica e imparare nuove tecniche di sviluppo in HTML5 Canvas e JavaScript.
+👉 https://abatukam88.github.io/Top-Gear-P2P---Enhanced-Version/
+
+---
+
+> ⚠️ **Questo progetto è una versione personale basata sul progetto originale realizzato da 1001 Avventura.**
+> Tutti i meriti e i crediti del progetto originale appartengono al suo autore. Questa repository nasce esclusivamente come progetto di studio, sperimentazione e miglioramento personale.
 
 ## Progetto originale
 
-Il progetto originale è stato realizzato da **1001 Avventura**.
+Il progetto originale è stato sviluppato da **1001 Avventura**.
 
-📺 Canale YouTube  
+📺 **Canale YouTube**  
 https://www.youtube.com/@1001avventura
 
-🎥 Video del progetto originale  
+🎥 **Video originale del progetto**  
 https://www.youtube.com/watch?v=Ch1WsS0INRQ&t=1042s
 
-Questa repository contiene esclusivamente una versione personale con modifiche e miglioramenti.
+Consiglio di guardare il video originale per capire come è stato realizzato il progetto di partenza.
 
 ---
 
-# Principali modifiche
+# Modifiche introdotte
 
-- Sostituzione delle auto disegnate con **sprite PNG**
-- Nuovo selettore delle vetture
-- Sincronizzazione della vettura tra tutti i giocatori
-- Miglioramenti grafici
-- Nuovi effetti (Boost, DRS, Glow)
-- Rendering delle auto completamente rivisto
-- Miglioramenti ai box
-- Miglior gestione dello spawn
-- Ottimizzazioni e pulizia del codice
+Questa versione include alcune modifiche e miglioramenti rispetto al progetto originale.
+
+## Grafica
+
+- Auto realizzate con sprite PNG invece del disegno tramite Canvas.
+- Nuovo selettore delle vetture con anteprime.
+- Miglior rendering delle automobili.
+- Effetti Glow.
+- Effetti Boost.
+- Miglioramenti visivi del DRS.
+
+## Multiplayer
+
+- Sincronizzazione della vettura selezionata tra tutti i giocatori.
+- Ogni giocatore vede il modello corretto dell'auto.
+
+## Gameplay
+
+- Miglioramenti all'ingresso dei box.
+- Spawn dei giocatori più affidabile.
+- Piccole ottimizzazioni del gameplay.
+
+## Codice
+
+- Pulizia e riorganizzazione di alcune parti del codice.
+- Ottimizzazioni generali.
+- Diverse modifiche sperimentali.
 
 ---
 
-# Strumenti utilizzati
-
-Per la realizzazione di questa versione sono stati utilizzati diversi strumenti di Intelligenza Artificiale come supporto allo sviluppo.
-
-- **Gemini** per la generazione delle immagini e degli sprite.
-- **ChatGPT** per la scrittura dei prompt e come supporto durante lo sviluppo.
-- **Kimi K2**, **Qwen** e **Claude AI** come assistenza nella programmazione e nella risoluzione di alcuni problemi del codice.
-
-Tutto il codice è stato comunque verificato, adattato e integrato manualmente.
-
----
-
-# Tecnologie
+# Tecnologie utilizzate
 
 - HTML5
 - CSS3
@@ -54,20 +65,33 @@ Tutto il codice è stato comunque verificato, adattato e integrato manualmente.
 
 ---
 
+# Supporto tramite IA
+
+Durante lo sviluppo sono stati utilizzati diversi strumenti di Intelligenza Artificiale come supporto.
+
+- **Gemini** per la generazione delle immagini e degli sprite.
+- **ChatGPT** per la creazione dei prompt e come supporto durante lo sviluppo.
+- **Kimi K2**, **Qwen** e **Claude AI** come assistenza nella programmazione, nel debug e nella risoluzione di alcuni problemi.
+
+Le modifiche finali, l'integrazione e i test sono stati eseguiti manualmente.
+
+---
+
 # Scopo del progetto
 
-Questo progetto è stato realizzato esclusivamente a scopo didattico e di sperimentazione, per approfondire:
+Questa repository è stata realizzata esclusivamente per:
 
-- HTML5 Canvas
-- JavaScript
-- Multiplayer Peer-to-Peer
-- Gestione degli sprite
-- Rendering 2D
+- studio personale;
+- sperimentazione;
+- migliorare le competenze in JavaScript;
+- approfondire HTML5 Canvas;
+- sperimentare il multiplayer Peer-to-Peer;
+- imparare a utilizzare sprite e rendering 2D.
 
 ---
 
 # Ringraziamenti
 
-Un ringraziamento a **1001 Avventura** per aver pubblicato gratuitamente il progetto originale e il relativo tutorial, che hanno rappresentato un'ottima base di studio.
+Un ringraziamento a **1001 Avventura** per aver condiviso gratuitamente il progetto originale e il relativo tutorial, che hanno rappresentato un'ottima base di studio.
 
-Se il progetto vi interessa, vi consiglio di guardare il video originale e di iscrivervi al canale YouTube.
+Se il progetto vi è piaciuto, vi consiglio di visitare il suo canale YouTube e guardare il video originale.
