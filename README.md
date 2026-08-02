@@ -27,6 +27,21 @@ Consiglio di guardare il video originale per capire come è stato realizzato il 
 
 Questa versione include alcune modifiche e miglioramenti rispetto al progetto originale.
 
+## 🏁 Modalità "Destruction Derby" (nuovo)
+
+Oltre alla gara F1 è stata aggiunta una seconda modalità: **arena demolition** multiplayer.
+
+- Selettore **"Modalità Destruction Derby"** nel menu di ingresso (stessa stanza P2P della F1).
+- **4 arene** arredate: Landa di Ferro (fango), Deserto di Sassi (sabbia), Officina Junk (cemento), Esagono di Ghiaia — con barriere di pneumatici, pozzanghere, torri faro e segno "X" al centro.
+- **10 auto demo** dedicate (`auto derby/`).
+- **Lobby di attesa**: l'host decide quando partire col pulsante **🏁 VIA**; i ritardatari entrano come osservatori e pilotano dal round successivo.
+- Bots con personalità diverse per coprire le slot vuote.
+- **Meteo completo durante la gara**: sole, pioggia leggera/forte con gocce animate e schizzi, notte con fari e stelle, nebbia volumetrica.
+- **Audio sintetizzato**: rombo del motore, schianti, esplosioni, colpi al muro, beep di semaforo.
+- **Effetti di terreno**: su fango/ghiaia/sabbia le auto si sporcano con le ore di guida e fanno volare zolle di terra (aria pulita su cemento).
+- **Regola di vittoria**: l'**ultima macchina ancora in piedi vince**; in caso di tempo scaduto vince chi ha più punti. Pulsante **RIGIOCA** per un nuovo round senza ricaricare la pagina.
+- Ancora di robustezza: rende loop infallibile e cure anti-`NaN` per evitare il freeze dopo la vittoria.
+
 ## Grafica
 
 - Auto realizzate con sprite PNG invece del disegno tramite Canvas.
