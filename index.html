@@ -362,38 +362,212 @@ const AudioEngine = (function(){
       o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime+dur+0.02);
     }catch(_){}
   }
-  function noiseBurst(dur,vol=0.2,cutoff=1200,type='lowpass'){
+  function noiseBurst(dur,vol=0.2,cutoff=1200,type='lowpass',glideCut=null){
     try{
-      const c=ensureCtx(); const buf=c.createBuffer(1, c.sampleRate*dur, c.sampleRate);
+      const c=ensureCtx(); const buf=c.createBuffer(1, Math.max(c.sampleRate*0.03|0, c.sampleRate*dur), c.sampleRate);
       const d=buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*(1-i/d.length);
       const src=c.createBufferSource(); src.buffer=buf;
       const f=c.createBiquadFilter(); f.type=type; f.frequency.value=cutoff;
+      if(glideCut) f.frequency.exponentialRampToValueAtTime(Math.max(40,glideCut), c.currentTime+dur);
       const g=c.createGain(); g.gain.setValueAtTime(vol,c.currentTime); g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+dur);
       src.connect(f); f.connect(g); g.connect(c.destination); src.start(); src.stop(c.currentTime+dur+0.02);
     }catch(_){}
   }
-  return { ensureCtx, tone, noiseBurst };
+  // sonorità stratificata (rumore + più oscillatori) per impatti/esplosioni più corposi
+  function combo(parts){
+    try{
+      const c=ensureCtx();
+      for(const p of parts){
+        const dur=Math.max(0.03,p.dur||0.2);
+        if(p.noise){
+          const buf=c.createBuffer(1, Math.max(c.sampleRate*0.03|0, c.sampleRate*dur), c.sampleRate);
+          const dd=buf.getChannelData(0); for(let i=0;i<dd.length;i++) dd[i]=(Math.random()*2-1)*(1-i/dd.length);
+          const s=c.createBufferSource(); s.buffer=buf;
+          const f=c.createBiquadFilter(); f.type=p.filt||'lowpass'; f.frequency.value=p.cut||800;
+          const g=c.createGain(); g.gain.setValueAtTime(p.v||0.2,c.currentTime); g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+dur);
+          s.connect(f); f.connect(g); g.connect(c.destination); s.start(); s.stop(c.currentTime+dur+0.02);
+        } else {
+          const o=c.createOscillator(); o.type=p.type||'sine'; o.frequency.value=p.f||220;
+          if(p.g) o.frequency.exponentialRampToValueAtTime(Math.max(1,p.g), c.currentTime+dur);
+          const g=c.createGain(); g.gain.setValueAtTime(p.v||0.2,c.currentTime); g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+dur);
+          o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime+dur+0.02);
+        }
+      }
+    }catch(_){}
+  }
+  // boom sordo (esplosione/urto violento)
+  function boom(vol){
+    combo([
+      {noise:true, dur:1.0, v:vol*0.7, filt:'lowpass', cut:460},
+      {f:170, dur:0.55, type:'sawtooth', v:vol*0.45, g:38},
+      {f:62, dur:1.2, type:'sine', v:vol*0.85, g:30}
+    ]);
+  }
+  // metallica a gamme alte (lacroccia/corpo-contro-corpo)
+  function clang(vol){
+    combo([
+      {noise:true, dur:0.13, v:vol*0.5, filt:'highpass', cut:2600, g:1200},
+      {f:70+Math.random()*100, dur:0.18, type:'square', v:vol*0.3, g:38}
+    ]);
+  }
+  // ---------- rumori d'ambiente a lunga durata ----------
+  // rumore bianco in loop riutilizzabile (pioggia, tempesta, vento, bordone), regolabile in corsa
+  const loopReg={};
+  function loopNoise(name,type,cutoff,vol){
+    try{
+      const c=ensureCtx();
+      const ex=loopReg[name];
+      if(ex){
+        ex.f.frequency.setTargetAtTime(cutoff,c.currentTime,0.15);
+        ex.g.gain.setTargetAtTime(vol,c.currentTime,0.15);
+        return ex.g;
+      }
+      const buf=c.createBuffer(1,c.sampleRate*2,c.sampleRate);
+      const d=buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+      const s=c.createBufferSource(); s.buffer=buf; s.loop=true;
+      const f=c.createBiquadFilter(); f.type=type; f.frequency.value=cutoff;
+      const g=c.createGain(); g.gain.value=vol;
+      s.connect(f); f.connect(g); g.connect(c.destination); s.start();
+      loopReg[name]={f,g,s};
+      return g;
+    }catch(_){ return {setTargetAtTime:function(){},value:0}; }
+  }
+  function loopStop(name){
+    try{
+      const ex=loopReg[name];
+      if(ex){
+        const t=ex.g.context.currentTime;
+        ex.g.gain.setTargetAtTime(0.0001,t,0.1);
+        ex.s.stop(t+0.8);
+      }
+    }catch(_){}
+    loopReg[name]=null;
+  }
+  // onda di rumore che sale e poi svanisce (raffica di vento, boato d'effetto)
+  function noiseSwell(dur,vol,cutoff,type,hold=0.4){
+    try{
+      const c=ensureCtx();
+      const buf=c.createBuffer(1,Math.max(c.sampleRate*0.03|0,c.sampleRate*dur),c.sampleRate);
+      const d=buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*(1-i/d.length);
+      const s=c.createBufferSource(); s.buffer=buf;
+      const f=c.createBiquadFilter(); f.type=type; f.frequency.value=cutoff;
+      const g=c.createGain(); const t=c.currentTime;
+      g.gain.setValueAtTime(0.001,t);
+      g.gain.linearRampToValueAtTime(vol,t+dur*hold);
+      g.gain.linearRampToValueAtTime(0.001,t+dur);
+      s.connect(f); f.connect(g); g.connect(c.destination); s.start(); s.stop(t+dur+0.02);
+    }catch(_){}
+  }
+  // tuono che rotola via per 3 secondi, con rimbombi ravvicinati
+  function thunder(vol=0.3){
+    combo([
+      {noise:true, dur:3.2, v:vol*0.5, filt:'lowpass', cut:420, g:30},
+      {f:86, dur:2.2, type:'sawtooth', v:vol*0.25, g:32},
+      {f:46, dur:3.4, type:'sine', v:vol*0.8, g:26}
+    ]);
+    setTimeout(()=>{ try{ noiseBurst(1.2,vol*0.28,240,'lowpass',70); }catch(_){} }, 420);
+    setTimeout(()=>{ try{ noiseBurst(1.8,vol*0.2,170,'lowpass',50); }catch(_){} }, 1250);
+  }
+  // folla che esulta: grappoli di rumore bandpassati (applausi + urla), durata in ms
+  function crowd(vol=0.22,durMs=3600){
+    try{
+      const c=ensureCtx();
+      const t0=c.currentTime;
+      for(let i=0;i<24;i++){
+        const delay=Math.random()*(durMs/1000);
+        setTimeout(()=>{
+          try{
+            const buf=c.createBuffer(1,Math.max(c.sampleRate*0.03|0,c.sampleRate*0.5),c.sampleRate);
+            const d=buf.getChannelData(0); for(let k=0;k<d.length;k++) d[k]=(Math.random()*2-1)*(1-k/d.length);
+            const s=c.createBufferSource(); s.buffer=buf;
+            const f=c.createBiquadFilter(); f.type='bandpass';
+            f.frequency.value=500+Math.random()*1500; f.Q.value=0.8;
+            const g=c.createGain(); const t=c.currentTime;
+            g.gain.setValueAtTime(0.001,t);
+            g.gain.linearRampToValueAtTime(vol*(0.4+Math.random()*0.6),t+0.09);
+            g.gain.linearRampToValueAtTime(0.001,t+0.55);
+            s.connect(f); f.connect(g); g.connect(c.destination); s.start(); s.stop(t+0.6);
+          }catch(_){}
+        },delay*1000);
+      }
+    }catch(_){}
+  }
+  // fanfara di vittoria: arpeggio acuto a due voci
+  function fanfare(){
+    [[392,0],[392,0.12],[523,0.24],[659,0.36],[784,0.48],[659,0.36],[523,0.6],[659,0.9]].forEach(p=>{
+      setTimeout(()=>{
+        combo([
+          {f:p[0], dur:0.3, type:'square', v:0.15},
+          {f:p[0]*2, dur:0.26, type:'triangle', v:0.11},
+          {f:p[0]*0.5, dur:0.34, type:'sine', v:0.16}
+        ]);
+      },p[1]*1000);
+    });
+  }
+  return { ensureCtx, tone, noiseBurst, combo, boom, clang, loopNoise, loopStop, noiseSwell, thunder, crowd, fanfare };
 })();
 window.addEventListener('pointerdown', ()=> AudioEngine.ensureCtx(), {once:true, capture:true});
 window.addEventListener('keydown', ()=> AudioEngine.ensureCtx(), {once:true, capture:true});
 
-// motore continuo: rombo del motore in base alla velocità del giocatore
-let engineOsc=null, engineGain=null;
+// stormo tempesta: fulmini + tuono (condiviso tra F1 e derby)
+const StormFX = {
+  a:0, last:0, next: performance.now()/1000 + rand(5,10),
+  tick(heavy){
+    const t = performance.now()/1000;
+    // il flash decade velocemente nel tempo
+    StormFX.a = Math.max(0, StormFX.a - (t-(StormFX.last||t))*6.5);
+    if(!heavy){ return 0; }
+    if(t>=StormFX.next){
+      StormFX.next = t + rand(4, 11);
+      StormFX.a = 1; StormFX.last = t;
+      const del = 0.35 + rand(0, 1.0);   // distanza lampo->tuono
+      setTimeout(()=>{
+        try{
+          AudioEngine.noiseBurst(1.6, 0.22, 150, 'lowpass', 60);
+          AudioEngine.tone(120, 1.4, 'sawtooth', 0.16, 40);
+        }catch(_){}
+      }, del*1000);
+    }
+    return StormFX.a;
+  }
+};
+
+// motore continuo: rombo a più voci (saw low + quad basso + fruscio d'aria) in base alla velocità
+let engineOsc=null, engineOsc2=null, engineGain=null, engineGain2=null, engineWindGain=null;
 function startEngineHum(){
   try{
     const c=AudioEngine.ensureCtx();
-    engineOsc=c.createOscillator(); engineOsc.type='sawtooth';
-    const filt=c.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value=900;
-    engineGain=c.createGain(); engineGain.gain.value=0.0;
-    engineOsc.connect(filt); filt.connect(engineGain); engineGain.connect(c.destination);
-    engineOsc.frequency.value=60; engineOsc.start();
+    const master=c.createGain(); master.gain.value=1; master.connect(c.destination);
+    function voice(type, fc){
+      const o=c.createOscillator(); o.type=type;
+      const f=c.createBiquadFilter(); f.type='lowpass'; f.frequency.value=fc;
+      const g=c.createGain(); g.gain.value=0.0;
+      o.connect(f); f.connect(g); g.connect(master);
+      return {o,g};
+    }
+    const a=voice('sawtooth', 1000), b=voice('square', 500);
+    engineOsc=a.o; engineGain=a.g; engineOsc2=b.o; engineGain2=b.g;
+    // vento/velocità: rumore bianco filtrato in bandpass, gain legato alla velocità
+    const nbuf=c.createBuffer(1, c.sampleRate*2, c.sampleRate);
+    const nd=nbuf.getChannelData(0); for(let i=0;i<nd.length;i++) nd[i]=Math.random()*2-1;
+    const ns=c.createBufferSource(); ns.buffer=nbuf; ns.loop=true;
+    const nf=c.createBiquadFilter(); nf.type='bandpass'; nf.frequency.value=1400; nf.Q.value=0.7;
+    const ng=c.createGain(); ng.gain.value=0.0;
+    ns.connect(nf); nf.connect(ng); ng.connect(master);
+    engineWindGain=ng; ns.start();
+    engineOsc.frequency.value=54; engineOsc.start();
+    engineOsc2.frequency.value=27; engineOsc2.start();
   }catch(_){}
 }
 function updateEngineHum(speedFrac, throttleOn){
   if(!engineOsc) return;
   try{
-    engineOsc.frequency.setTargetAtTime(60+speedFrac*260, AudioEngine.ensureCtx().currentTime, 0.08);
-    engineGain.gain.setTargetAtTime(throttleOn?0.05+speedFrac*0.05:0.02, AudioEngine.ensureCtx().currentTime, 0.12);
+    const t=AudioEngine.ensureCtx().currentTime;
+    engineOsc.frequency.setTargetAtTime(54+speedFrac*270, t, 0.08);
+    if(engineOsc2) engineOsc2.frequency.setTargetAtTime(27+speedFrac*150, t, 0.1);
+    engineGain.gain.setTargetAtTime(throttleOn?0.05+speedFrac*0.055:0.02, t, 0.12);
+    if(engineGain2) engineGain2.gain.setTargetAtTime(throttleOn?0.03+speedFrac*0.035:0.012, t, 0.13);
+    if(engineWindGain) engineWindGain.gain.setTargetAtTime(speedFrac*speedFrac*0.05, t, 0.16);
   }catch(_){}
 }
 
@@ -791,6 +965,65 @@ function startGame(myName, myColor, roomCode, room, isSpectator, roomNet, roomMa
   };
   const rainDrops = [];
   let lastFrameAt = performance.now();
+
+  // ---------- effetti persistenti in modalità F1 ----------
+  const skidMarks = [];            // segni di gomma sull'asfalto (frenate/curve in velocità)
+  const SKID_MAX = 2400;
+  let f1Shake = 0;                 // intensità del tremore camera (urti)
+  let f1Flash = 0;                 // flash di danno a schermo (urti)
+  function shCam(){
+    if(f1Shake<=0.001) return {x:0,y:0};
+    const m=f1Shake*0.55;
+    return {x:(Math.random()*2-1)*m, y:(Math.random()*2-1)*m};
+  }
+  // ---------- particelle F1 (scintille/fumo) in coordinate MONDO ----------
+  const f1Parts = [];
+  function spawnF1(kind, x, y, dx, dy, n){
+    for(let i=0;i<n;i++){
+      if(kind==='spark'){
+        const a=Math.atan2(dy,dx)+rand(-1.05,1.05)+Math.PI, sp=rand(70,260);
+        f1Parts.push({kind, x, y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp, gy:320,
+          life:rand(0.22,0.55), max:0.55, size:rand(1.5,3.4), gray:0});
+      } else if(kind==='smoke'){
+        f1Parts.push({kind, x:x+rand(-8,8), y:y+rand(-8,8), vx:rand(-14,14), vy:rand(-30,-8), gy:-8,
+          life:rand(0.7,1.7), max:1.7, size:rand(6,15), gray:rand(66,108)});
+      } else { // fire
+        f1Parts.push({kind, x:x+rand(-6,6), y:y+rand(-6,6), vx:rand(-18,18), vy:rand(-40,-14), gy:-14,
+          life:rand(0.3,0.8), max:0.8, size:rand(3,7), gray:0});
+      }
+    }
+    if(f1Parts.length>420) f1Parts.splice(0, f1Parts.length-420);
+  }
+  function updateF1(dt){
+    for(let i=f1Parts.length-1;i>=0;i--){
+      const p=f1Parts[i];
+      p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=p.gy*dt; p.life-=dt;
+      if(p.life<=0) f1Parts.splice(i,1);
+    }
+  }
+  function drawF1Parts(){
+    for(const p of f1Parts){
+      const a=clamp(p.life/p.max,0,1);
+      if(p.kind==='spark'){
+        ctx.globalCompositeOperation='lighter';
+        ctx.fillStyle='rgba(255,'+Math.floor(185+70*a)+',70,'+a+')';
+        ctx.fillRect(p.x,p.y,p.size,p.size);
+        ctx.globalCompositeOperation='source-over';
+      } else if(p.kind==='fire'){
+        ctx.globalCompositeOperation='lighter';
+        const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,(p.size*a)+3);
+        g.addColorStop(0,'rgba(255,'+Math.floor(150+80*a)+',40,'+(0.8*a)+')');
+        g.addColorStop(1,'rgba(255,60,0,0)');
+        ctx.fillStyle=g; ctx.beginPath(); ctx.arc(p.x,p.y,(p.size*a)+3,0,TAU); ctx.fill();
+        ctx.globalCompositeOperation='source-over';
+      } else {
+        ctx.fillStyle='rgba('+p.gray+','+Math.round(p.gray+6)+','+Math.round(p.gray+10)+','+(0.32*a)+')';
+        ctx.beginPath(); ctx.arc(p.x,p.y,(p.size*a)+2,0,TAU); ctx.fill();
+      }
+    }
+  }
+  let trackLamps=null;             // torri faro lungo la pista (generate una volta per circuito)
+  let startGantry=null;            // arco del traguardo
 
   const canvas=$('#world'); const ctx=canvas.getContext('2d');
   const mini=$('#mini'); const mctx=mini.getContext('2d');
@@ -1241,6 +1474,16 @@ else if(inp.throttle>0 && c.fuel>0){
       // vettura arriva solo dagli urti con altre vetture, non dall'uscita di pista.
       if(c.offTrack){ c.speed*=0.992; }
 
+      // segni di gomma: frenate brusche e curve a velocità lasciano tracce scure sull'asfalto
+      if(!c.pitServicing && !c.inPitLane){
+        const hardBrake = inp.brake>0 && c.speed>130;
+        const hardCorner = Math.abs(c.steer)>0.55 && c.speed>150;
+        if(hardBrake || hardCorner){
+          if(skidMarks.length>=SKID_MAX) skidMarks.shift();
+          skidMarks.push({x:c.x, y:c.y, a:hardBrake?0.05:0.032, r:hardBrake?3.6:2.6});
+        }
+      }
+
       // avanzamento posizione
       if(!c.pitServicing){
         c.x += Math.cos(c.heading)*c.speed*dt;
@@ -1284,8 +1527,13 @@ else if(inp.throttle>0 && c.fuel>0){
             // piccola spinta verso l'esterno del contatto, per non restare incastrati l'uno nell'altro
             c.x += (dx/d)*10; c.y += (dy/d)*10;
             c.collideCooldown = 1.1;
+            f1Shake = Math.min(9, f1Shake + (iAmBehind?4.5:3));
+            f1Flash = Math.min(1, f1Flash + (iAmBehind?0.5:0.32));
+            spawnF1('spark', (c.x+rs.x)/2, (c.y+rs.y)/2, dx/d, dy/d, 10);
+            spawnF1('smoke', c.x, c.y, 0, 0, 3);
             showToast(iAmBehind ? '💥 Tamponamento: colpa tua, danno doppio!' : '💥 Contatto subito da dietro');
-            AudioEngine.noiseBurst(0.22,0.22,500,'lowpass');
+            AudioEngine.clang(0.5); AudioEngine.noiseBurst(0.22,0.22,500,'lowpass');
+            if(dmg>=14) AudioEngine.boom(0.3);
             break;
           }
         }
@@ -1380,6 +1628,7 @@ else if(inp.throttle>0 && c.fuel>0){
         myCar.lapStartAt = null;
         myCar.__wasDisabled = false;
         pendingPitService = null;
+        skidMarks.length = 0;
         $('#pitBadge').style.display='none';
       }
     }
@@ -1612,13 +1861,14 @@ else if(inp.throttle>0 && c.fuel>0){
   }
 
   // ---------- rendering ----------
-  function worldToScreen(x,y){ return { sx: canvas.width/2 + (x-myCar.x)*viewScale, sy: canvas.height/2 + (y-myCar.y)*viewScale }; }
+  function worldToScreen(x,y){ const n=shCam(); return { sx: canvas.width/2 + (x-myCar.x+n.x)*viewScale, sy: canvas.height/2 + (y-myCar.y+n.y)*viewScale }; }
 
   function drawTrack(){
     ctx.save();
     ctx.translate(canvas.width/2, canvas.height/2);
     ctx.scale(viewScale, viewScale);
-    ctx.translate(-myCar.x, -myCar.y);
+    const camOff=shCam();
+    ctx.translate(-(myCar.x+camOff.x), -(myCar.y+camOff.y));
     // erba: gradiente radiale con texture procedurale a macchie, colori diversi a seconda del meteo
     const wi = weatherInfo();
     const grassPal = {
@@ -1677,6 +1927,25 @@ else if(inp.throttle>0 && c.fuel>0){
       });
       ctx.closePath(); ctx.stroke();
     }
+    // grana fine dell'asfalto: puntini di luce/scuro generati una volta per circuito
+    if(!track.__asphNoise){
+      track.__asphNoise=[];
+      const bw=track.width*0.46;
+      for(let i=0;i<460;i++){
+        const pt=track.pointAtFrac(Math.random());
+        const la=rand(-bw,bw);
+        track.__asphNoise.push({x:pt.x-la*pt.hy, y:pt.y+la*pt.hx, s:rand(2,5), d:Math.random()<0.5});
+      }
+    }
+    for(const n of track.__asphNoise){
+      ctx.fillStyle = n.d ? 'rgba(255,255,255,0.045)' : 'rgba(0,0,0,0.06)';
+      ctx.fillRect(n.x, n.y, n.s, n.s*0.7);
+    }
+    // segni di gomma lasciati dalla vettura (frenate/curve)
+    for(const m of skidMarks){
+      ctx.fillStyle=`rgba(12,13,16,${m.a})`;
+      ctx.beginPath(); ctx.arc(m.x,m.y,m.r,0,TAU); ctx.fill();
+    }
     // asfalto bagnato sotto la pioggia: scuro con riflessi di luce spezzati
     if(wi.id==='rain-l' || wi.id==='rain-h'){
       ctx.fillStyle='rgba(16,26,44,.30)'; ctx.fill();
@@ -1707,6 +1976,12 @@ else if(inp.throttle>0 && c.fuel>0){
     ctx.beginPath();
     track.right.forEach((p,i)=> i===0?ctx.moveTo(p[0],p[1]):ctx.lineTo(p[0],p[1])); ctx.closePath(); ctx.stroke();
     ctx.restore();
+    // linee di bordo chiare (definiscono il margine della carreggiata)
+    ctx.strokeStyle='rgba(255,255,255,0.16)'; ctx.lineWidth=2.6; ctx.lineJoin='round';
+    ctx.beginPath();
+    track.left.forEach((p,i)=> i===0?ctx.moveTo(p[0],p[1]):ctx.lineTo(p[0],p[1])); ctx.closePath(); ctx.stroke();
+    ctx.beginPath();
+    track.right.forEach((p,i)=> i===0?ctx.moveTo(p[0],p[1]):ctx.lineTo(p[0],p[1])); ctx.closePath(); ctx.stroke();
     ctx.strokeStyle='rgba(255,255,255,.25)'; ctx.lineWidth=3; ctx.setLineDash([14,16]); ctx.beginPath();
     track.center.forEach((p,i)=> i===0?ctx.moveTo(p[0],p[1]):ctx.lineTo(p[0],p[1])); ctx.closePath(); ctx.stroke(); ctx.setLineDash([]);
     // cordoli: seguono tutti i punti intermedi della curva (non una corda dritta), altrimenti nelle curve
@@ -1728,13 +2003,110 @@ else if(inp.throttle>0 && c.fuel>0){
     track.pitLane.forEach((p,i)=> i===0?ctx.moveTo(p[0],p[1]):ctx.lineTo(p[0],p[1])); ctx.stroke();
     ctx.strokeStyle='rgba(255,210,77,.7)'; ctx.lineWidth=2; ctx.setLineDash([6,6]); ctx.beginPath();
     track.pitLane.forEach((p,i)=> i===0?ctx.moveTo(p[0],p[1]):ctx.lineTo(p[0],p[1])); ctx.stroke(); ctx.setLineDash([]);
-    // linea traguardo
+    // segnaletica luminosa di ingresso/uscita corsia box (oltre il nastro della corsia)
+    const pitSigns=[[track.pitStartFrac,'PIT IN','#57e389'],[track.pitEndFrac,'PIT OUT','#ff8a4d']];
+    const pitSignBlink=Math.sin(performance.now()/260)>0;
+    for(const [fr,txt,col] of pitSigns){
+      const ps=track.pointAtFrac(fr);
+      const ox=ps.x+ps.hy*(track.width/2+64), oy=ps.y-ps.hx*(track.width/2+64);
+      ctx.save(); ctx.translate(ox,oy); ctx.rotate(Math.atan2(ps.hy,ps.hx));
+      ctx.fillStyle='rgba(10,14,20,0.82)'; ctx.fillRect(-30,-12,62,24);
+      ctx.strokeStyle=col; ctx.lineWidth=2; ctx.strokeRect(-30,-12,62,24);
+      ctx.fillStyle=col; ctx.font='bold 12px monospace'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(txt,1,0);
+      ctx.fillStyle='rgba(255,255,255,'+(pitSignBlink?0.9:0.25)+')';
+      ctx.beginPath(); ctx.arc(-33,0,3,0,TAU); ctx.fill();
+      ctx.fillStyle=col;
+      ctx.beginPath(); ctx.moveTo(30,-6); ctx.lineTo(42,0); ctx.lineTo(30,6); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    // linea traguardo: banda a scacchi più ampia con fasce bianche/nero
     const sp=track.pointAtFrac(0);
     ctx.save();
-    ctx.shadowColor='rgba(255,255,255,.6)'; ctx.shadowBlur=10;
+    ctx.shadowColor='rgba(255,255,255,.65)'; ctx.shadowBlur=12;
     ctx.translate(sp.x,sp.y); ctx.rotate(Math.atan2(sp.hy,sp.hx)+Math.PI/2);
-    for(let i=-4;i<4;i++){ ctx.fillStyle=(i%2===0)?'#fff':'#111'; ctx.fillRect(i*10,-3,10,6); }
+    const chkW=11, chkN=Math.ceil(track.width/2/chkW)*2;
+    for(let i=-chkN/2;i<chkN/2;i++){ ctx.fillStyle=(i%2===0)?'#fff':'#101114'; ctx.fillRect(i*chkW,-4,chkW,8); }
+    ctx.fillStyle='rgba(255,255,255,.12)'; ctx.fillRect(-chkN/2*chkW,-9,chkN*chkW,18);
     ctx.restore();
+    // arco del traguardo (gantry): due piloni + traversa con scritte luminose
+    if(!startGantry || startGantry.f !== track.name){
+      startGantry={f:track.name};
+    }
+    {
+      const hx=-sp.hy, hy=sp.hx;
+      const tw=track.width/2+26;
+      for(const side of [-1,1]){
+        const px=sp.x+hx*tw*side, py=sp.y+hy*tw*side;
+        ctx.save(); ctx.translate(px,py); ctx.rotate(Math.atan2(sp.hy,sp.hx)+Math.PI/2);
+        ctx.fillStyle='#2a2d35'; ctx.fillRect(-7,-34,14,68);
+        ctx.fillStyle='rgba(255,255,255,.35)'; ctx.fillRect(-5,-34,3,68);
+        ctx.fillStyle='#ffd24d'; ctx.fillRect(-11,28,22,6);
+        ctx.restore();
+      }
+      // traversa sopra la pista
+      ctx.save();
+      ctx.translate(sp.x,sp.y); ctx.rotate(Math.atan2(sp.hy,sp.hx)+Math.PI/2);
+      ctx.fillStyle='#1d2027'; ctx.fillRect(-tw, -56, tw*2, 22);
+      ctx.fillStyle='rgba(255,210,77,.95)';
+      ctx.font='bold 13px monospace'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('TOP GEAR P2P', 0, -44);
+      ctx.fillStyle='rgba(255,255,255,.55)';
+      ctx.font='bold 8px monospace'; ctx.fillText('TRAGUARDO', 0, -61);
+      ctx.restore();
+    }
+    // bandiere a scacchi che sventolano sui piloni dell'arco del traguardo
+    {
+      const wt=performance.now()/1000;
+      const hx2=-sp.hy, hy2=sp.hx, tw2=track.width/2+26;
+      for(const side of [-1,1]){
+        const px=sp.x+hx2*tw2*side, py=sp.y+hy2*tw2*side;
+        ctx.save(); ctx.translate(px,py); ctx.rotate(Math.atan2(sp.hy,sp.hx)+Math.PI/2);
+        const wave=Math.sin(wt*5+side*1.8)*5;
+        ctx.beginPath();
+        ctx.moveTo(8,-46);
+        ctx.lineTo(8+26,-46-wave);
+        ctx.lineTo(8+20,-46+18-wave*0.4);
+        ctx.closePath();
+        ctx.fillStyle='#e8e8ea'; ctx.fill();
+        ctx.strokeStyle='#20222a'; ctx.lineWidth=1.4; ctx.stroke();
+        ctx.strokeStyle='#20222a'; ctx.lineWidth=1;
+        ctx.beginPath();
+        ctx.moveTo(10,-46-wave*0.15); ctx.lineTo(26,-46-wave*0.9);
+        ctx.moveTo(11,-46+6-wave*0.2); ctx.lineTo(24,-46+6-wave*0.8);
+        ctx.moveTo(12,-46+12-wave*0.25); ctx.lineTo(22,-46+12-wave*0.6);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+    // torri faro lungo la pista: visibili soprattutto di notte/nebbia
+    if(!trackLamps || trackLamps.f !== track.name){
+      trackLamps={f:track.name, arr:[]};
+      const nPoles=Math.max(8, Math.floor(track.n/60));
+      for(let i=0;i<nPoles;i++){
+        const pt=track.pointAtFrac(i/nPoles + 0.03);
+        const off=track.width/2+26;
+        trackLamps.arr.push({x:pt.x+pt.hy*off, y:pt.y-pt.hx*off, hx:pt.hx, hy:pt.hy});
+      }
+    }
+    for(const lp of trackLamps.arr){
+      ctx.save(); ctx.translate(lp.x,lp.y); ctx.rotate(Math.atan2(lp.hy,lp.hx));
+      ctx.fillStyle='#2b2e36'; ctx.fillRect(-4,-14,8,28);
+      ctx.fillStyle='rgba(255,240,200,.9)'; ctx.fillRect(-2,-18,4,6);
+      if(wi.id==='night' || wi.id==='fog'){
+        const cone=ctx.createLinearGradient(0,0,-track.width*0.9,0);
+        cone.addColorStop(0,'rgba(255,244,210,0.16)');
+        cone.addColorStop(1,'rgba(255,244,210,0)');
+        ctx.fillStyle=cone;
+        ctx.beginPath(); ctx.moveTo(0,-9); ctx.lineTo(-track.width*0.9,-26); ctx.lineTo(-track.width*0.9,26); ctx.lineTo(0,9); ctx.closePath(); ctx.fill();
+        ctx.globalCompositeOperation='lighter';
+        const halo=ctx.createRadialGradient(0,0,0,0,0,30);
+        halo.addColorStop(0,'rgba(255,250,220,0.30)'); halo.addColorStop(1,'rgba(255,250,220,0)');
+        ctx.fillStyle=halo; ctx.beginPath(); ctx.arc(0,0,30,0,TAU); ctx.fill();
+        ctx.globalCompositeOperation='source-over';
+      }
+      ctx.restore();
+    }
     // zone DRS: fascia semitrasparente lungo il tracciato, con bordi luminosi per leggibilità a colpo d'occhio
     const drsPulse = 0.14 + Math.sin(performance.now()/450)*0.04;
     track.drsZones.forEach(z=>{
@@ -1901,9 +2273,29 @@ else if(inp.throttle>0 && c.fuel>0){
     }
   }
   function drawSpeedTrail(wx, wy, heading, speed){
-    const trailAlpha = clamp((speed-150)/150,0,1) * 0.4;
-    ctx.fillStyle = `rgba(255,255,255,${trailAlpha})`;
-    ctx.beginPath(); ctx.arc(wx-Math.cos(heading)*20, wy-Math.sin(heading)*20, 7, 0, TAU); ctx.fill();
+    const a = clamp((speed-150)/220,0,1);
+    if(a<=0.01) return;
+    const back = heading+Math.PI;
+    // strisce di vento/motion-blur dietro la vettura, più lunghe e dense con la velocità
+    const streaks = 3 + Math.floor(a*5);
+    for(let i=0;i<streaks;i++){
+      const off = (i-streaks/2)*6.5;
+      const bx = wx+Math.cos(back)*28, by = wy+Math.sin(back)*28;
+      const px = bx+Math.sin(back)*off, py = by-Math.cos(back)*off;
+      const len = 16 + a*34 + (i%2)*8;
+      ctx.strokeStyle=`rgba(255,255,255,${a*0.22})`;
+      ctx.lineWidth=1.8+(a*1.6);
+      ctx.beginPath();
+      ctx.moveTo(px-Math.cos(back)*len, py-Math.sin(back)*len);
+      ctx.lineTo(px+Math.cos(back)*len*0.35, py+Math.sin(back)*len*0.35);
+      ctx.stroke();
+    }
+    // alone di scia che si allunga col passo
+    const g=ctx.createRadialGradient(wx,wy,0,wx,wy,20+a*26);
+    g.addColorStop(0,`rgba(255,255,255,${a*0.35})`);
+    g.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle=g;
+    ctx.beginPath(); ctx.arc(wx,wy,20+a*26,0,TAU); ctx.fill();
   }
   function drawDamageSmoke(wx, wy, heading, damage){
     const smokeAlpha = clamp((damage-60)/40,0,1) * 0.5;
@@ -1988,46 +2380,134 @@ else if(inp.throttle>0 && c.fuel>0){
     ctx.globalCompositeOperation='source-over';
   }
   // overlay meteo in coordinate SCHERMO (dopo il restore del transform mondo)
+  const weatherClouds = [];        // nuvole in cielo (modalità sole)
+  const shootingStars = [];        // stelle cadenti (notte)
+  const rainRipples = [];          // increspature sulle pozzanghere (pioggia)
   function drawWeatherOverlay(){
     const wi = weatherInfo();
     const w=canvas.width, h=canvas.height;
     const frameDt = clamp((performance.now()-lastFrameAt)/1000, 0, 0.05);
     lastFrameAt = performance.now();
     if(wi.id==='rain-l' || wi.id==='rain-h'){
-      ctx.fillStyle = wi.id==='rain-h' ? 'rgba(8,14,28,.38)' : 'rgba(18,28,48,.22)';
-      ctx.fillRect(0,0,w,h);
-      const count = wi.id==='rain-h' ? 350 : 200;
-      while(rainDrops.length<count) rainDrops.push({x:Math.random()*w, y:Math.random()*h, len:rand(10,28), spd:rand(800,1300), vx:rand(-60,60)});
+      const heavy = wi.id==='rain-h';
+      // cielo plumbeo a gradiente: scuro in alto, leggermente più chiaro verso il basso
+      const skyG=ctx.createLinearGradient(0,0,0,h);
+      if(heavy){
+        skyG.addColorStop(0,'rgba(8,14,30,.58)');
+        skyG.addColorStop(0.55,'rgba(12,18,34,.44)');
+        skyG.addColorStop(1,'rgba(20,28,46,.30)');
+      } else {
+        skyG.addColorStop(0,'rgba(14,22,42,.34)');
+        skyG.addColorStop(0.55,'rgba(18,26,44,.26)');
+        skyG.addColorStop(1,'rgba(26,34,52,.16)');
+      }
+      ctx.fillStyle=skyG; ctx.fillRect(0,0,w,h);
+      // fulmine: alone radiale + ramo con ramificazioni e riverbero luminoso
+      const fl = StormFX.tick(heavy);
+      if(fl>0.02){
+        const flashA=Math.min(0.5, fl*0.55);
+        const fg=ctx.createRadialGradient(w/2,h*0.15,0,w/2,h*0.15,Math.max(w,h)*0.7);
+        fg.addColorStop(0,`rgba(215,230,255,${flashA})`);
+        fg.addColorStop(1,'rgba(215,230,255,0)');
+        ctx.fillStyle=fg; ctx.fillRect(0,0,w,h);
+        if(fl>0.55){
+          const bx=rand(w*0.2,w*0.8), by=rand(h*0.05,h*0.2);
+          const bolts=[]; let px2=bx, py2=by;
+          for(let k=1;k<8;k++){
+            const nx2=px2+rand(-55,55)*(0.3+0.12*k), ny2=py2+32+Math.random()*16;
+            bolts.push([px2,py2,nx2,ny2]); px2=nx2; py2=ny2;
+          }
+          ctx.strokeStyle=`rgba(255,255,255,${fl*0.95})`; ctx.lineWidth=3;
+          ctx.shadowColor='rgba(180,210,255,0.9)'; ctx.shadowBlur=14;
+          ctx.beginPath();
+          for(const b of bolts){ ctx.moveTo(b[0],b[1]); ctx.lineTo(b[2],b[3]); }
+          ctx.stroke();
+          ctx.shadowBlur=0;
+          ctx.strokeStyle=`rgba(160,200,255,${fl*0.5})`; ctx.lineWidth=1.2;
+          for(const b of bolts){
+            const mx=(b[0]+b[2])/2, my=(b[1]+b[3])/2;
+            ctx.beginPath();
+            ctx.moveTo(mx,my);
+            ctx.lineTo(mx+rand(-40,40), my+28+Math.random()*20);
+            ctx.stroke();
+          }
+        }
+      }
+      // tre strati di gocce per profondità (lontano -> vicino)
+      const count = heavy ? 380 : 220;
+      const cntFar=Math.floor(count*0.3), cntMid=Math.floor(count*0.4);
+      while(rainDrops.length<count) rainDrops.push({x:Math.random()*w, y:Math.random()*h, len:rand(10,28), spd:rand(850,1350), vx:rand(-70,70)});
       rainDrops.length = count;
-      ctx.strokeStyle = wi.id==='rain-h' ? 'rgba(150,190,235,.45)' : 'rgba(180,215,255,.30)';
-      ctx.lineWidth = wi.id==='rain-h' ? 1.5 : 1.1;
-      ctx.beginPath();
       for(const d of rainDrops){
         d.y += d.spd*frameDt; d.x += d.vx*frameDt;
-        if(d.y>h+28){ d.y=-28; d.x=Math.random()*w; }
-        if(d.x>w+28) d.x=-28; if(d.x<-28) d.x=w+28;
-        ctx.moveTo(d.x,d.y); ctx.lineTo(d.x-d.vx*0.04, d.y-d.len);
+        if(d.y>h+30){ d.y=-30; d.x=Math.random()*w; }
+        if(d.x>w+30) d.x=-30; if(d.x<-30) d.x=w+30;
+      }
+      // strato lontano: puntini corti e attenuati
+      ctx.strokeStyle = heavy ? 'rgba(150,190,235,.15)' : 'rgba(180,215,255,.10)';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      for(let i=0;i<cntFar;i++){
+        const d=rainDrops[i];
+        ctx.moveTo(d.x, d.y-d.len*0.5); ctx.lineTo(d.x, d.y);
       }
       ctx.stroke();
-      ctx.fillStyle='rgba(160,200,240,.08)';
-      for(let i=0;i<count;i+=2){
+      // strato intermedio
+      ctx.strokeStyle = heavy ? 'rgba(150,190,235,.32)' : 'rgba(180,215,255,.22)';
+      ctx.lineWidth = heavy ? 1.2 : 1;
+      ctx.beginPath();
+      for(let i=cntFar;i<cntFar+cntMid;i++){
         const d=rainDrops[i];
-        ctx.fillRect(d.x-1.5,d.y+d.len,3,5);
+        ctx.moveTo(d.x, d.y-d.len); ctx.lineTo(d.x, d.y);
       }
+      ctx.stroke();
+      // strato vicino: strisce lunghe e luminose con inclinazione da vento
+      ctx.strokeStyle = heavy ? 'rgba(190,220,255,.60)' : 'rgba(200,225,255,.42)';
+      ctx.lineWidth = heavy ? 1.8 : 1.4;
+      ctx.lineCap='round';
+      ctx.beginPath();
+      for(let i=cntFar+cntMid;i<count;i++){
+        const d=rainDrops[i];
+        ctx.moveTo(d.x-d.vx*0.05, d.y-d.len); ctx.lineTo(d.x, d.y);
+      }
+      ctx.stroke();
+      ctx.lineCap='butt';
+      // increspature: doppio cerchio in espansione + macchia interna luminosa
+      if(Math.random()<0.45 && rainRipples.length<40){
+        rainRipples.push({x:Math.random()*w, y:Math.random()*h, r:2+Math.random()*4, life:1});
+      }
+      for(let i=rainRipples.length-1;i>=0;i--){
+        const rr=rainRipples[i];
+        rr.r += 30*frameDt; rr.life -= 1.3*frameDt;
+        if(rr.life<=0){ rainRipples.splice(i,1); continue; }
+        ctx.strokeStyle=`rgba(170,205,240,${0.3*rr.life})`; ctx.lineWidth=1.4;
+        ctx.beginPath(); ctx.arc(rr.x,rr.y,rr.r,0,TAU); ctx.stroke();
+        ctx.strokeStyle=`rgba(170,205,240,${0.15*rr.life})`; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.arc(rr.x,rr.y,rr.r*0.6,0,TAU); ctx.stroke();
+        ctx.fillStyle=`rgba(180,210,245,${0.05*rr.life})`;
+        ctx.beginPath(); ctx.arc(rr.x,rr.y,rr.r*0.5,0,TAU); ctx.fill();
+      }
+      // pozzanghere sul tracciato con riflesso del cielo
       if(!track.__splashes){
         track.__splashes=[];
         const bb=track.bbox;
         for(let i=0;i<40;i++) track.__splashes.push({x:bb.minX+Math.random()*(bb.maxX-bb.minX), y:bb.minY+Math.random()*(bb.maxY-bb.minY), r:rand(3,10), a:rand(0.1,0.25)});
       }
-      ctx.fillStyle='rgba(120,160,200,.12)';
+      ctx.fillStyle='rgba(140,180,225,.16)';
       for(const s of track.__splashes){
         ctx.beginPath(); ctx.ellipse(s.x,s.y,s.r,s.r*0.6,0,0,TAU); ctx.fill();
       }
+      // riflesso specchiante dell'asfalto bagnato (banda luminosa nella parte bassa)
+      const wetG=ctx.createLinearGradient(0,h*0.6,0,h);
+      wetG.addColorStop(0,'rgba(160,195,235,0)');
+      wetG.addColorStop(1, heavy?'rgba(160,195,235,.10)':'rgba(160,195,235,.06)');
+      ctx.fillStyle=wetG; ctx.fillRect(0,h*0.6,w,h*0.4);
       // fari sempre accesi anche sotto la pioggia
       const cars = [{x:myCar.x,y:myCar.y,heading:myCar.heading,isPlayer:true}];
       for(const [,r] of remoteCars) cars.push({x:r.state.x,y:r.state.y,heading:r.state.heading,isPlayer:false});
       drawCarLights(cars, 0.85);
     } else if(wi.id==='night'){
+      StormFX.tick(false);
       ctx.fillStyle='rgba(0,0,0,0.42)'; ctx.fillRect(0,0,w,h);
       const cars = [{x:myCar.x,y:myCar.y,heading:myCar.heading,isPlayer:true}];
       for(const [,r] of remoteCars) cars.push({x:r.state.x,y:r.state.y,heading:r.state.heading,isPlayer:false});
@@ -2043,7 +2523,36 @@ else if(inp.throttle>0 && c.fuel>0){
         ctx.beginPath(); ctx.arc(sx,sy,sz,0,TAU); ctx.fill();
       }
       ctx.globalAlpha=1;
+      // luna con alone e crateri
+      const mx=w*0.84, my=h*0.16, mr=Math.min(w,h)*0.05;
+      const mg=ctx.createRadialGradient(mx,my,mr*0.2,mx,my,mr*3);
+      mg.addColorStop(0,'rgba(230,235,255,0.14)');
+      mg.addColorStop(0.4,'rgba(210,220,250,0.05)');
+      mg.addColorStop(1,'rgba(210,220,250,0)');
+      ctx.fillStyle=mg; ctx.beginPath(); ctx.arc(mx,my,mr*3,0,TAU); ctx.fill();
+      ctx.fillStyle='#e8ecf7'; ctx.beginPath(); ctx.arc(mx,my,mr,0,TAU); ctx.fill();
+      ctx.fillStyle='#c9d0e2';
+      ctx.beginPath(); ctx.arc(mx-mr*0.3,my-mr*0.2,mr*0.22,0,TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(mx+mr*0.25,my+mr*0.3,mr*0.16,0,TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(mx+mr*0.4,my-mr*0.35,mr*0.1,0,TAU); ctx.fill();
+      // stelle cadenti ogni tanto
+      if(shootingStars.length===0 && Math.random()<0.006){
+        shootingStars.push({x:rand(w*0.1,w*0.9), y:rand(h*0.05,h*0.25), vx:rand(520,780), vy:rand(160,260), life:1});
+      }
+      for(let i=shootingStars.length-1;i>=0;i--){
+        const ss=shootingStars[i];
+        ss.x+=ss.vx*frameDt; ss.y+=ss.vy*frameDt; ss.life-=1.6*frameDt;
+        if(ss.life<=0){ shootingStars.splice(i,1); continue; }
+        ctx.strokeStyle=`rgba(255,255,255,${0.85*ss.life})`; ctx.lineWidth=2;
+        ctx.beginPath();
+        ctx.moveTo(ss.x,ss.y);
+        ctx.lineTo(ss.x-ss.vx*0.16, ss.y-ss.vy*0.16);
+        ctx.stroke();
+        ctx.fillStyle=`rgba(255,255,255,${ss.life})`;
+        ctx.beginPath(); ctx.arc(ss.x,ss.y,2,0,TAU); ctx.fill();
+      }
     } else if(wi.id==='fog'){
+      StormFX.tick(false);
       const fogTime=performance.now()/1000;
       const cx=w/2, cy=h/2;
       // Atmosfera di base: nebbia densa in basso (orizzonte), ariosa in alto
@@ -2052,31 +2561,54 @@ else if(inp.throttle>0 && c.fuel>0){
       baseG.addColorStop(0.45,'rgba(168,176,192,0.16)');
       baseG.addColorStop(1,'rgba(186,193,208,0.28)');
       ctx.fillStyle=baseG; ctx.fillRect(0,0,w,h);
+      // Fasci di luce che filtrano dall'alto (volumetric light shafts) e ondeggiano piano
+      ctx.save(); ctx.globalCompositeOperation='lighter';
+      const gx0=w*0.42+Math.sin(fogTime*0.12)*w*0.06, gy0=-h*0.08;
+      for(let i=0;i<4;i++){
+        const ang=Math.PI/2+(i-1.5)*0.24+Math.sin(fogTime*0.15+i*1.9)*0.05;
+        const len=Math.max(w,h)*0.8;
+        const sp=0.14+((i*0.37)%1)*0.05;
+        ctx.save();
+        ctx.translate(gx0,gy0); ctx.rotate(ang);
+        const rg=ctx.createLinearGradient(0,0,0,len);
+        rg.addColorStop(0,'rgba(255,252,240,0.055)');
+        rg.addColorStop(0.6,'rgba(255,250,238,0.028)');
+        rg.addColorStop(1,'rgba(255,250,238,0)');
+        ctx.fillStyle=rg;
+        ctx.beginPath();
+        ctx.moveTo(-sp*len*0.3,0);
+        ctx.lineTo(sp*len*0.3,0);
+        ctx.lineTo(sp*len*0.12,len);
+        ctx.lineTo(-sp*len*0.12,len);
+        ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
+      ctx.restore();
       // Grandi banchi di nebbia che derivano lentamente (parallax)
-      const bankCount=4;
+      const bankCount=5;
       for(let i=0;i<bankCount;i++){
-        const spd=0.015+i*0.005;
-        const px=((i*0.618)*w*0.6+fogTime*spd*w)%(w*1.5)-w*0.25;
-        const py=h*(0.52+Math.sin(i*2.1+fogTime*0.08)*0.20)+Math.cos(i*1.7+fogTime*0.05)*50;
-        const pr=(0.38+0.22*Math.sin(i*3.7))*Math.max(w,h);
-        const a=Math.max(0,0.05+0.03*Math.sin(i*2.4+fogTime*0.3));
+        const spd=0.012+i*0.005;
+        const px=((i*0.618)*w*0.6+fogTime*spd*w)%(w*1.6)-w*0.3;
+        const py=h*(0.52+Math.sin(i*2.1+fogTime*0.08)*0.22)+Math.cos(i*1.7+fogTime*0.05)*55;
+        const pr=(0.36+0.24*Math.sin(i*3.7))*Math.max(w,h);
+        const a=Math.max(0,0.055+0.035*Math.sin(i*2.4+fogTime*0.3));
         const g=ctx.createRadialGradient(px,py,0,px,py,pr);
-        g.addColorStop(0,`rgba(198,204,218,${a})`);
-        g.addColorStop(0.6,`rgba(198,204,218,${a*0.4})`);
-        g.addColorStop(1,'rgba(198,204,218,0)');
+        g.addColorStop(0,`rgba(200,206,220,${a})`);
+        g.addColorStop(0.6,`rgba(198,204,218,${a*0.45})`);
+        g.addColorStop(1,'rgba(196,202,216,0)');
         ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
       }
       // Soffici volute di nebbia con sfumatura radiale ellittica (effetto volumetrico)
       for(let layer=0;layer<3;layer++){
-        const layerAlpha=0.12+layer*0.05;
-        const layerSpeed=0.22+layer*0.14;
+        const layerAlpha=0.11+layer*0.05;
+        const layerSpeed=0.20+layer*0.14;
         const seed=layer*137.7;
         const count=14-layer*2;
         for(let i=0;i<count;i++){
           const baseX=(Math.sin(i*13.7+seed*0.618)*0.5+0.5)*w;
           const baseY=(Math.cos(i*9.2-seed*1.13)*0.5+0.5)*h;
-          const drift=Math.sin(fogTime*layerSpeed*0.5+i*1.3)*90;
-          const fy=baseY+Math.sin(fogTime*0.4+i*0.8)*45;
+          const drift=Math.sin(fogTime*layerSpeed*0.5+i*1.3)*110+fogTime*layerSpeed*40;
+          const fy=baseY+Math.sin(fogTime*0.4+i*0.8)*50;
           const pulse=0.8+0.2*Math.sin(fogTime*layerSpeed+i*2.2);
           const frx=(110+Math.sin(i*7.1)*55)*pulse;
           const fry=(36+Math.cos(i*5.3)*18)*pulse;
@@ -2092,6 +2624,15 @@ else if(inp.throttle>0 && c.fuel>0){
           ctx.restore();
         }
       }
+      // nebbiolina fine che scorre rasente al suolo (strato basso e veloce)
+      ctx.strokeStyle='rgba(190,198,212,0.06)'; ctx.lineWidth=1;
+      ctx.beginPath();
+      for(let i=0;i<36;i++){
+        const mx2=((i*61.9+fogTime*45)%(w+220))-110;
+        const my2=h*0.72+Math.sin(fogTime*0.5+i*2.3)*28+((i*37.7)%1)*h*0.22;
+        ctx.moveTo(mx2,my2); ctx.lineTo(mx2-44,my2-7);
+      }
+      ctx.stroke();
       // Vignettatura morbida: bordi lattiginosi che sfumano verso il centro
       const maxR=Math.hypot(w,h)/2;
       const g=ctx.createRadialGradient(cx,cy,0,cx,cy,maxR);
@@ -2100,16 +2641,64 @@ else if(inp.throttle>0 && c.fuel>0){
       g.addColorStop(1,'rgba(172,179,196,0.22)');
       ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
     } else if(wi.id==='sun'){
-      const g = ctx.createRadialGradient(w/2,h/2,0,w/2,h/2,Math.hypot(w,h)/2);
-      g.addColorStop(0,'rgba(255,215,140,0)');
-      g.addColorStop(0.6,'rgba(255,210,130,0.04)');
-      g.addColorStop(1,'rgba(255,200,110,0.10)');
-      ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
-      const sunGlow = ctx.createRadialGradient(w/2,h*0.35,0,w/2,h*0.35,200);
-      sunGlow.addColorStop(0,'rgba(255,230,160,0.08)');
-      sunGlow.addColorStop(1,'rgba(255,220,140,0)');
-      ctx.fillStyle=sunGlow; ctx.fillRect(0,0,w,h);
+      StormFX.tick(false);
+      const t=performance.now()/1000;
+      // caldo ambientale: tonalità dorata che avvolge tutta la scena
+      ctx.fillStyle='rgba(255,199,120,0.10)'; ctx.fillRect(0,0,w,h);
+      // disco solare in alto, come la luna di notte: palla luminosa con alone, senza raggi
+      const sunX=w*0.75, sunY=h*0.17;
+      const sunR=Math.min(w,h)*0.075;
+      const halo=ctx.createRadialGradient(sunX,sunY,sunR*0.3,sunX,sunY,sunR*6);
+      halo.addColorStop(0,'rgba(255,248,220,0.28)');
+      halo.addColorStop(0.3,'rgba(255,235,175,0.12)');
+      halo.addColorStop(1,'rgba(255,220,150,0)');
+      ctx.fillStyle=halo; ctx.beginPath(); ctx.arc(sunX,sunY,sunR*6,0,TAU); ctx.fill();
+      const disk=ctx.createRadialGradient(sunX-sunR*0.2,sunY-sunR*0.25,sunR*0.1,sunX,sunY,sunR);
+      disk.addColorStop(0,'#fffdf4');
+      disk.addColorStop(0.55,'#ffefbe');
+      disk.addColorStop(1,'#ffd878');
+      ctx.fillStyle=disk; ctx.beginPath(); ctx.arc(sunX,sunY,sunR,0,TAU); ctx.fill();
+      // nuvole volumetriche (soffici, illuminate dal sole) con leggera ombra interna
+      if(weatherClouds.length===0){
+        const seed=Math.random()*1000;
+        for(let i=0;i<7;i++){
+          weatherClouds.push({x:rand(-200,w+200), y:rand(h*0.06,h*0.30), s:rand(0.7,1.7), v:rand(12,38)*(Math.random()<0.5?-1:1),
+            g:(i*137+seed)%2});
+        }
+      }
+      for(const cl of weatherClouds){
+        cl.x += cl.v*frameDt;
+        if(cl.x<-280) cl.x=w+260; if(cl.x>w+280) cl.x=-260;
+        const cwB=46*cl.s;
+        ctx.save(); ctx.translate(cl.x,cl.y);
+        for(let k=0;k<4;k++){
+          const ox=(k-1.5)*cwB*0.55, oy=(k%3-1)*6*cl.s, orad=cwB*(0.55+0.08*k);
+          const cg=ctx.createRadialGradient(ox,oy,0,ox,oy,orad);
+          cg.addColorStop(0,`rgba(255,255,255,${cl.g?0.95:0.85})`);
+          cg.addColorStop(0.6,`rgba(250,246,235,0.6)`);
+          cg.addColorStop(1,'rgba(250,240,220,0)');
+          ctx.fillStyle=cg; ctx.beginPath(); ctx.arc(ox,oy,orad,0,TAU); ctx.fill();
+        }
+        // ombra bassa sotto la nuvola per profondità
+        const sh=ctx.createLinearGradient(0,4,0,14);
+        sh.addColorStop(0,'rgba(120,110,95,0.18)');
+        sh.addColorStop(1,'rgba(120,110,95,0)');
+        ctx.fillStyle=sh; ctx.beginPath(); ctx.ellipse(0,10*cl.s,cwB*0.8,cwB*0.14,0,0,TAU); ctx.fill();
+        ctx.restore();
+      }
+      // bagliore diffuso che fa "scaldare" anche le parti più in basso
+      const warm=ctx.createLinearGradient(0,0,0,h);
+      warm.addColorStop(0,'rgba(255,190,110,0.05)');
+      warm.addColorStop(0.7,'rgba(255,180,110,0)');
+      warm.addColorStop(1,'rgba(255,150,80,0.16)');
+      ctx.fillStyle=warm; ctx.fillRect(0,0,w,h);
     }
+    // vignettatura cinematografica finale (sempre, dose differente a seconda del meteo)
+    const vg=ctx.createRadialGradient(w/2,h/2,Math.min(w,h)*0.32, w/2,h/2,Math.max(w,h)*0.72);
+    const vA = wi.id==='night' ? 0.16 : 0.22;
+    vg.addColorStop(0,'rgba(0,0,0,0)');
+    vg.addColorStop(1,`rgba(0,0,0,${vA})`);
+    ctx.fillStyle=vg; ctx.fillRect(0,0,w,h);
   }
 
   function render(){
@@ -2124,23 +2713,23 @@ else if(inp.throttle>0 && c.fuel>0){
     ctx.save();
     ctx.translate(canvas.width/2, canvas.height/2);
     ctx.scale(viewScale, viewScale);
-    ctx.translate(-myCar.x, -myCar.y);
+    const pcam=shCam();
+    ctx.translate(-(myCar.x+pcam.x), -(myCar.y+pcam.y));
     const raining = weatherInfo().id==='rain-l' || weatherInfo().id==='rain-h';
     for(const [,r] of remoteCars){
       const ip = interpCarPos(r, now);
       if(r.state.boosting) drawBoostFx(ip.x, ip.y, ip.heading, t, false);
-      if(r.state.speed > 150 && !r.state.boosting) drawSpeedTrail(ip.x, ip.y, ip.heading, r.state.speed);
       if(r.state.damage > 60) drawDamageSmoke(ip.x, ip.y, ip.heading, r.state.damage);
       if(r.state.offTrack) drawOffTrackDirt(ip.x, ip.y);
       if(raining && r.state.speed>0) drawRainSplash(ip.x, ip.y, ip.heading, r.state.speed);
     }
     if(!isSpectator){
       if(myCar.boosting) drawBoostFx(myCar.x, myCar.y, myCar.heading, t, true);
-      if(myCar.speed > 150 && !myCar.boosting) drawSpeedTrail(myCar.x, myCar.y, myCar.heading, myCar.speed);
       if(myCar.damage > 60) drawDamageSmoke(myCar.x, myCar.y, myCar.heading, myCar.damage);
       if(myCar.offTrack) drawOffTrackDirt(myCar.x, myCar.y);
       if(raining && myCar.speed>40) drawRainSplash(myCar.x, myCar.y, myCar.heading, myCar.speed);
     }
+    drawF1Parts();
     ctx.restore();
 
     for(const [,r] of remoteCars){
@@ -2153,6 +2742,14 @@ else if(inp.throttle>0 && c.fuel>0){
     drawPitCrew();
     drawMini();
     drawWeatherOverlay();
+    // flash rosso di danno (urti) sopra tutto, con alone bianco caldo al centro
+    if(f1Flash>0.02){
+      ctx.fillStyle='rgba(255,45,20,'+(f1Flash*0.20)+')'; ctx.fillRect(0,0,canvas.width,canvas.height);
+      const fg=ctx.createRadialGradient(canvas.width/2,canvas.height/2,0,canvas.width/2,canvas.height/2,Math.max(canvas.width,canvas.height)*0.55);
+      fg.addColorStop(0,'rgba(255,220,180,'+(f1Flash*0.12)+')');
+      fg.addColorStop(1,'rgba(255,220,180,0)');
+      ctx.fillStyle=fg; ctx.fillRect(0,0,canvas.width,canvas.height);
+    }
   }
 
   // ---------- chat testuale ----------
@@ -2281,8 +2878,20 @@ else if(inp.throttle>0 && c.fuel>0){
   function tick(){
     const now = performance.now();
     const dt = Math.min(0.1, (now-lastT)/1000); lastT=now;
+    f1Shake = Math.max(0, f1Shake - dt*7);
+    f1Flash = Math.max(0, f1Flash - dt*1.4);
+    updateF1(dt);
     hostTick();
-    if(!isSpectator) updateMyCar(dt);
+    if(!isSpectator){
+      updateMyCar(dt);
+      // fumo continuo dalle vetture danneggiate + fuoco se gravissimo
+      if(myCar.damage>60 && Math.random()<0.35){
+        spawnF1('smoke', myCar.x-Math.cos(myCar.heading)*18+rand(-7,7), myCar.y-Math.sin(myCar.heading)*18+rand(-7,7), 0, 0, 1);
+      }
+      if(myCar.damage>=100 && Math.random()<0.12){
+        spawnF1('fire', myCar.x+rand(-10,10), myCar.y+rand(-10,10), 0, 0, 1);
+      }
+    }
     if(now-lastNetSend>66){
       lastNetSend=now;
       if(!isSpectator) sendCar({ x:myCar.x,y:myCar.y,heading:myCar.heading,speed:myCar.speed,
@@ -2503,7 +3112,57 @@ function startDerbyGame(myName, room, scheme, weatherSel, playerSpriteIdx, arena
   const inputsBySlot = []; // host: input dei piloti remoti per slot
   let mySlot = -1;
   let elapsed = 0, over = false, winner = null, hasEnded = false;
+  let jumboStart = performance.now();   // istante di apparizione del cartellone DERBY (per l'animazione d'entrata)
   const particles = [];
+  const derbySkid = [];            // segni di gomma permanenti sul terreno
+  let shakeA = 0;                  // tremore camera da impatti/boati
+  let curShX = 0, curShY = 0;
+  function addShake(v){ shakeA = Math.min(16, Math.max(shakeA, v)); }
+
+  // ---------- annunci di gara (demolizioni / colpetti forti) ----------
+  const toastList=[];
+  const prevCarState={};
+  function toastPush(txt, color, big){ toastList.unshift({txt,color,big,t:performance.now()}); if(toastList.length>4) toastList.pop(); }
+  function scanToasts(list){
+    const now=performance.now();
+    for(const c of list){
+      if(c.slot==null) continue;
+      const p=prevCarState[c.slot];
+      if(!p){ prevCarState[c.slot]={d:c.destroyed?1:0, hp:c.health||100}; continue; }
+      if(!p.d && c.destroyed){
+        toastPush(c.human ? 'SEI FUORI !' : 'FUORI: '+c.name, '#ff4b3a', true);
+      } else if(!p.d && !c.destroyed && (p.hp-(c.health||100))>26){
+        toastPush('COLPO: '+c.name, '#ffd24a', false);
+      }
+      prevCarState[c.slot]={d:c.destroyed?1:0, hp:c.health||100};
+    }
+  }
+  function drawToasts(){
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    const now=performance.now(), x=canvas.width/2;
+    let idx=0;
+    while(idx<toastList.length){
+      const tt=toastList[idx]; const age=(now-tt.t)/1000;
+      if(age>4.2){ toastList.splice(idx,1); continue; }
+      const yy=canvas.height*0.18+idx*26;
+      const al = age<0.12 ? (age/0.12)*0.92 : (age>3.4 ? Math.max(0,(4.2-age)/0.8)*0.92 : 0.92);
+      ctx.font=(tt.big?'bold 22px monospace':'bold 16px monospace');
+      ctx.fillStyle=tt.color; ctx.globalAlpha=al;
+      ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=8;
+      ctx.fillText(tt.txt, x, yy+canvas.height*0.05);
+      ctx.globalAlpha=1; ctx.shadowBlur=0;
+      idx++;
+    }
+    ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+  }
+  function routeShake(){
+    if(shakeA>0.01){
+      const m=shakeA*0.55;
+      curShX=(Math.random()*2-1)*m; curShY=(Math.random()*2-1)*m;
+      shakeA=Math.max(0, shakeA-0.9);
+    } else { curShX=0; curShY=0; }
+  }
+  let derbyClouds=null, derbyStars=null, derbyMoon=null, derbyRipples=[];
   let viewCars = [];
   let lastSnap = null;
 
@@ -2537,38 +3196,53 @@ function aiDrive(car){
     if(!car._ai) car._ai={seed:Math.random()*10, back:0, dir:(Math.random()<0.5?1:-1)};
     const ai=car._ai;
     if(ai.back>0) ai.back-=0.033;
-    if(car.stuckT>1.1){ ai.back=0.45; ai.dir=(Math.random()<0.5?1:-1); }
+    if(car.stuckT>1.1){ ai.back=0.5; ai.dir=(Math.random()<0.5?1:-1); }
     if(ai.back>0) return {throttle:0, brake:1, steer:ai.dir};
-    let tgt=null, tgtAny=null, bestSc=-1e9, bestAny=-1e9;
+    let best=null, bestSc=-1e9, tgtAny=null, bestAny=-1e9, cnt=0, ccx=0, ccy=0;
+    const bias=Math.sin(ai.seed*3.1+car.slot*1.7)*45;
     for(const c of cars){
-      if(c===car) continue;
+      if(c===car || c.destroyed) continue;
+      cnt++; ccx+=c.x; ccy+=c.y;
       const d=Math.hypot(c.x-car.x, c.y-car.y);
-      if(!c.destroyed){
-        let sc;
-        if(p.aggro>=1.05)      sc = -d - c.health*2.0;
-        else if(p.aggro>=0.80) sc = -d - c.health*0.5;
-        else if(p.aggro>=0.60) sc = -d*0.55 + (100-c.health)*0.3;
-        else                   sc = -d*0.45 + (100-c.health)*1.5;
-        if(sc>bestSc){ bestSc=sc; tgt=c; }
-      }
-      if(-d>bestAny){ bestAny=-d; tgtAny=c; }
+      let sc;
+      if(p.aggro>=1.05)      sc = -d - c.health*2.0 + bias;
+      else if(p.aggro>=0.80) sc = -d - c.health*0.5 + bias;
+      else if(p.aggro>=0.60) sc = -d*0.55 + (100-c.health)*0.3 + bias;
+      else                   sc = -d*0.45 + (100-c.health)*1.5 + bias;
+      if(sc>bestSc){ bestSc=sc; best=c; }
     }
-    // Se non restano auto vive si lanciano sulle carcasse: niente giri a vuoto sul posto.
-    if(!tgt) tgt=tgtAny;
-    if(!tgt) return {throttle:1, brake:0, steer:Math.sin(ai.seed*1.7 + performance.now()*0.0009)*0.9};
-    const ang=Math.atan2(tgt.y-car.y, tgt.x-car.x);
-    let rel=normAngA(ang-car.heading);
-    let steer=clamp(rel/(Math.PI/2.4), -1, 1);
+    // finale: nessuna auto viva -> si lanciano sulle carcasse
+    if(!best){
+      for(const c of cars){
+        if(c===car) continue;
+        const d=Math.hypot(c.x-car.x, c.y-car.y);
+        if(-d>bestAny){ bestAny=-d; tgtAny=c; }
+      }
+      best=tgtAny;
+    }
+    let tx=0, ty=0;
+    if(best){ tx=best.x; ty=best.y; }
+    // se il gruppo è compatto e il centro della mischia è più vicino della preda,
+    // convergono sul gruppo: più scontri, zero orbite attorno alla pista
+    if(best && cnt>=2){
+      const cdx=ccx/cnt-car.x, cdy=ccy/cnt-car.y;
+      const dcc=Math.hypot(cdx,cdy);
+      if(dcc < Math.hypot(tx-car.x, ty-car.y)*0.9){
+        tx=ccx/cnt; ty=ccy/cnt;
+      }
+    }
+    const ang=Math.atan2(ty-car.y, tx-car.x);
+    const rel=normAngA(ang-car.heading);
+    let steer=clamp(rel/(Math.PI/2.2), -1, 1);
     steer += Math.sin(ai.seed*2.7 + performance.now()*0.00055)*0.22;
-    const pb=clampArena(car.x+Math.cos(car.heading)*220, car.y+Math.sin(car.heading)*220);
+    // muro: lo evita solo da VICINO (130px), così non si mette a girargli intorno inutilmente
+    const pb=clampArena(car.x+Math.cos(car.heading)*130, car.y+Math.sin(car.heading)*130);
     if(pb.hit){
       let wr=normAngA(Math.atan2(-pb.uy,-pb.ux)-car.heading);
-      steer = steer*0.35 + clamp(wr/(Math.PI/2)*1.4,-1,1)*0.65;
+      steer = steer*0.30 + clamp(wr/(Math.PI/1.8)*1.2,-1,1)*0.70;
     }
-    const dd=Math.hypot(tgt.x-car.x, tgt.y-car.y);
-    let brake=0;
-    if(dd<150 && p.brake>=0.55 && Math.abs(rel)<0.9) brake=0.5;
-    return { throttle: brake>0.05?0:1, brake, steer };
+    // nel derby si va a sbattere: niente frenate prudenti
+    return { throttle:1, brake:0, steer };
   }
 
   // ---------- fisica ----------
@@ -2629,11 +3303,18 @@ const dmg=clamp(vn*0.017,0.7,9);
         c.vx-=b.ux*vn*1.7; c.vy-=b.uy*vn*1.7;
         c.spin+=vn*0.0022*rand(-1,1);
         if(dmg>3) spawnSparks(nx,ny,-b.ux,-b.uy,vn);
+        if(dmg>3.5){ addShake(dmg*0.5); spawnImpactRing(nx,ny, vn); }
         if(vn>45) snd('wall', 0.7*sndVolNear(nx,ny));
         if(c.health<=0) destroyCar(c);
       }
     }
     c.x=nx; c.y=ny;
+    // segni di gomma dura (frenate/derapate degli scontri)
+    const rawV=Math.hypot(c.vx,c.vy);
+    if(rawV>120 && !c.destroyed){
+      if(derbySkid.length>2200) derbySkid.shift();
+      derbySkid.push({x:c.x, y:c.y, a:0.05});
+    }
     c.stuckT = vs<14 ? c.stuckT+dt : 0;
   }
 
@@ -2643,6 +3324,7 @@ function destroyCar(c){
     const now=performance.now();
     if(c.lastHitBy && !c.lastHitBy.destroyed && (now-c.lastHitAt)<3000) c.lastHitBy.score+=150;
     spawnExplosion(c.x,c.y);
+    addShake(13);
     snd('crash', 0.9*sndVolNear(c.x,c.y));
     // NIENTE respawn: chi viene demolito resta demolito fino alla fine
   }
@@ -2663,14 +3345,15 @@ function destroyCar(c){
         SND.lastHit=now;
         AudioEngine.noiseBurst(0.08, Math.min(0.35,vol), 1400, 'bandpass');
         AudioEngine.tone(60+Math.random()*70, 0.09, 'sawtooth', Math.min(0.3,vol*0.9), 28);
+        AudioEngine.clang(Math.min(0.5,vol));
       } else if(kind==='wall' && now-SND.lastWall>90){
         SND.lastWall=now;
         AudioEngine.tone(120, 0.12, 'triangle', Math.min(0.35,vol), 40);
         AudioEngine.noiseBurst(0.1, Math.min(0.3,vol), 700, 'lowpass');
       } else if(kind==='crash' && now-SND.lastCrash>200){
         SND.lastCrash=now;
-        AudioEngine.noiseBurst(0.65, Math.min(0.6,vol), 600, 'lowpass');
-        AudioEngine.tone(110, 0.7, 'sawtooth', Math.min(0.4,vol*0.6), 40);
+        AudioEngine.boom(Math.min(0.75,vol));
+        AudioEngine.noiseBurst(0.65, Math.min(0.55,vol), 600, 'lowpass', 90);
         AudioEngine.tone(2600, 0.06, 'square', Math.min(0.2,vol*0.4));
       }
     }catch(_){}
@@ -2711,7 +3394,7 @@ if(!a.destroyed&&!b.destroyed){
       a.lastHitBy=b; a.lastHitAt=performance.now();
       b.lastHitBy=a; b.lastHitAt=performance.now();
       if(dmg>5) spawnSparks(a.x+nx*P.carR, a.y+ny*P.carR, -nx,-ny, relN);
-      if(dmg>6) snd('hit', 0.6*Math.min(1,dmg/22)*sndVolNear((a.x+b.x)/2,(a.y+b.y)/2));
+      if(dmg>6){ snd('hit', 0.6*Math.min(1,dmg/22)*sndVolNear((a.x+b.x)/2,(a.y+b.y)/2)); addShake(dmg*0.22); }
       if(a.health<=0) destroyCar(a);
       if(b.health<=0) destroyCar(b);
     } else if(a.destroyed&&!b.destroyed){
@@ -2733,13 +3416,25 @@ function updateParticles(dt){
     }
     if(particles.length>500) particles.splice(0, particles.length-500);
   }
-  function spawnSmoke(x,y){ particles.push({x,y,vx:rand(-8,8),vy:rand(-14,-4),gy:-6,life:rand(0.8,1.6),max:1.6,size:rand(6,14),kind:'smoke',gray:rand(70,110)}); }
+function spawnSmoke(x,y){ particles.push({x,y,vx:rand(-8,8),vy:rand(-14,-4),gy:-6,life:rand(0.8,1.6),max:1.6,size:rand(6,14),kind:'smoke',gray:rand(70,110)}); }
   function spawnFire(x,y){ particles.push({x,y,vx:rand(-12,12),vy:rand(-30,-10),gy:-10,life:rand(0.5,1),max:1,size:rand(4,9),kind:'fire',gray:0}); }
   function spawnSparks(x,y,nx,ny,v){ for(let i=0;i<4;i++){ const a=Math.atan2(ny,nx)+rand(-1.2,1.2), sp=rand(80,160); particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,gy:240,life:rand(0.2,0.5),max:0.5,size:rand(1.5,3),kind:'spark',gray:0}); } }
   function spawnDirt(x,y){ particles.push({x,y,vx:rand(-16,16),vy:rand(-40,-12),gy:14,life:rand(0.4,0.9),max:0.9,size:rand(3,8),kind:'dirt',gray:0}); }
+  // anello d'impatto: onda d'urto che si espande (impatti duri contro il muro)
+  function spawnImpactRing(x,y,v){
+    particles.push({x,y,vx:0,vy:0,gy:0,life:rand(0.35,0.55),max:0.55,size:clamp(10+v*0.5,18,60),kind:'ring',gray:0});
+    particles.push({x,y,vx:0,vy:0,gy:0,life:0.18,max:0.18,size:clamp(6+v*0.3,12,40),kind:'flash',gray:0});
+  }
   function spawnExplosion(x,y){
-    for(let i=0;i<28;i++){ const a=rand(0,TAU), sp=rand(40,240); particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,gy:60,life:rand(0.4,1.1),max:1.1,size:rand(3,10),kind:'fire',gray:0}); }
-    for(let i=0;i<16;i++){ particles.push({x,y,vx:rand(-30,30),vy:rand(-70,-10),gy:-8,life:rand(1,2.2),max:2.2,size:rand(10,22),kind:'smoke',gray:rand(30,60)}); }
+    // flash bianco centrale
+    particles.push({x,y,vx:0,vy:0,gy:0,life:0.22,max:0.22,size:120,kind:'flash',gray:0});
+    // anello d'urto espansivo
+    particles.push({x,y,vx:0,vy:0,gy:0,life:0.7,max:0.7,size:150,kind:'ring',gray:0});
+    for(let i=0;i<40;i++){ const a=rand(0,TAU), sp=rand(40,300); particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,gy:0,life:rand(0.35,0.85),max:0.85,size:rand(2,7),kind:'ember',gray:0}); }
+    for(let i=0;i<30;i++){ const a=rand(0,TAU), sp=rand(40,260); particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,gy:60,life:rand(0.4,1.1),max:1.1,size:rand(3,9),kind:'fire',gray:0}); }
+    for(let i=0;i<18;i++){ particles.push({x,y,vx:rand(-35,35),vy:rand(-80,-10),gy:-8,life:rand(1,2.4),max:2.4,size:rand(10,26),kind:'smoke',gray:rand(30,60)}); }
+    // schegge di detriti che rimbalzano
+    for(let i=0;i<10;i++){ const a=rand(0,TAU), sp=rand(120,360); particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,gy:420,life:rand(0.4,1.0),max:1.0,size:rand(2,5),kind:'debris',gray:rand(40,80)}); }
   }
 
 // ---------- rete ----------
@@ -2760,20 +3455,19 @@ function updateParticles(dt){
   dstartBtn.onclick=()=>{ phase='race'; startRef=performance.now()+PREP_MS; startOv.style.display='none'; };
   startBox.appendChild(dstartNote); startBox.appendChild(dstartBtn);
   startOv.appendChild(startBox);
-  document.body.appendChild(startOv);
-  if(isHost){
-    const mySpriteIdx = playerSpriteIdx;
-    function slotOf(pid){
-      const ex=roster.find(r=>r.peerId===pid);
-      if(ex) return ex.slot;
-      for(let s=0;s<10;s++){
-        if(!roster.some(r=>r.slot===s)){
-          roster.push({slot:s, peerId:pid, name: pid===selfId?myName:('P'+pid), sprite: pid===selfId?mySpriteIdx:0});
-          return s;
-        }
+document.body.appendChild(startOv);
+  function slotOf(pid){
+    const ex=roster.find(r=>r.peerId===pid);
+    if(ex) return ex.slot;
+    for(let s=0;s<10;s++){
+      if(!roster.some(r=>r.slot===s)){
+        roster.push({slot:s, peerId:pid, name: pid===selfId?myName:('P'+pid), sprite: pid===selfId?playerSpriteIdx:0});
+        return s;
       }
-      return -1;
     }
+    return -1;
+  }
+  if(isHost){
     mySlot = slotOf(selfId);
     for(let s=0;s<10;s++) cars[s]=spawnCar(s);
 getJoin((data,pid)=>{
@@ -2867,8 +3561,7 @@ function hostTick(dt){
     for(let i=0;i<cars.length;i++) for(let j=i+1;j<cars.length;j++) collide(cars[i],cars[j]);
     for(const c of cars){
       if(c.destroyed){
-        if(c.wreckT<8 && Math.random()<0.5) spawnFire(c.x+rand(-14,14), c.y+rand(-14,14));
-        else if(Math.random()<0.08) spawnSmoke(c.x+rand(-10,10), c.y+rand(-10,10));
+        if(Math.random()<0.08) spawnSmoke(c.x+rand(-10,10), c.y+rand(-10,10));
       } else if(c.health<40 && Math.random()<0.25){
         spawnSmoke(c.x+rand(-12,12), c.y+rand(-12,12));
       }
@@ -2898,7 +3591,7 @@ updateParticles(dt);
     ctx.save();
     ctx.translate(canvas.width/2, canvas.height/2);
     ctx.scale(viewScale, viewScale);
-    ctx.translate(-(f?f.x:0), -(f?f.y:0));
+    ctx.translate(-((f?f.x:0)+curShX), -((f?f.y:0)+curShY));
 const R=def.r;
     const sd=arenaIdx*131.7;
     let g;
@@ -2930,6 +3623,28 @@ const R=def.r;
     else if(def.shape==='ellipse') ctx.ellipse(0,0,R*(def.kx||1)*0.72, R*(def.ky||1)*0.72,0,0,TAU);
     else ctx.arc(0,0,R*0.80,0,TAU);
     ctx.fill();
+
+    // anello di usura battuto dalle auto intorno al centro
+    ctx.strokeStyle='rgba(0,0,0,0.10)'; ctx.lineWidth=R*0.07;
+    ctx.beginPath();
+    if(def.shape==='square') ctx.rect(-R*0.70,-R*0.70,R*1.40,R*1.40);
+    else if(def.shape==='ellipse') ctx.ellipse(0,0,R*(def.kx||1)*0.64, R*(def.ky||1)*0.64,0,0,TAU);
+    else ctx.arc(0,0,R*0.72,0,TAU);
+    ctx.stroke();
+
+    // segni di gomma delle auto (persistenti per la durata dell'incontro)
+    for(const m of derbySkid){
+      ctx.fillStyle=`rgba(10,10,12,${m.a})`;
+      ctx.beginPath(); ctx.arc(m.x,m.y,2.6,0,TAU); ctx.fill();
+    }
+
+    // grana del terreno: puntini con palette dell'arena (texture più viva)
+    for(let i=0;i<170;i++){
+      const aa=((i*47.3)%1)*TAU, rad=(0.05+((i*17.7)%1)*0.95)*R;
+      const gx=Math.cos(aa)*rad, gy=Math.sin(aa)*rad, gs=1+((i*31.1)%1)*3;
+      ctx.fillStyle=(i%2===0)?'rgba(0,0,0,0.09)':'rgba(255,255,255,0.045)';
+      ctx.beginPath(); ctx.arc(gx,gy,gs,0,TAU); ctx.fill();
+    }
 
     // solchi
     ctx.strokeStyle='rgba(0,0,0,0.12)';
@@ -2964,9 +3679,16 @@ const R=def.r;
       ctx.beginPath(); ctx.ellipse(cx3,cy3,R*(0.09+((i*5.3)%1)*0.06), R*(0.045+((i*8.7)%1)*0.025), (i%2)*Math.PI/3,0,TAU); ctx.fill();
     }
     // "X" al centro + linea di mezzeria (richiamo ai derby veri)
-    ctx.strokeStyle='rgba(255,255,255,0.10)'; ctx.lineWidth=7; ctx.lineCap='round';
+    const xPulse = 0.16 + Math.sin(performance.now()/700)*0.05;
+    ctx.save();
+    ctx.strokeStyle=`rgba(255,255,255,${xPulse})`; ctx.lineWidth=9; ctx.lineCap='round';
+    ctx.shadowColor='rgba(255,220,120,0.5)'; ctx.shadowBlur=16;
     ctx.beginPath(); ctx.moveTo(-R*0.12,-R*0.12); ctx.lineTo(R*0.12,R*0.12); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(R*0.12,-R*0.12); ctx.lineTo(-R*0.12,R*0.12); ctx.stroke();
+    ctx.strokeStyle=`rgba(255,255,255,${xPulse*0.5})`; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.moveTo(-R*0.18,-R*0.18); ctx.lineTo(R*0.18,R*0.18); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(R*0.18,-R*0.18); ctx.lineTo(-R*0.18,R*0.18); ctx.stroke();
+    ctx.restore();
     // barriera di pneumatici lungo la parete
     for(let i=0;i<26;i++){
       const a=i*TAU/26+0.3;
@@ -2975,6 +3697,321 @@ const R=def.r;
       ctx.beginPath(); ctx.arc(0,0,9,0,TAU); ctx.stroke();
       ctx.strokeStyle='rgba(62,58,52,0.8)'; ctx.lineWidth=4;
       ctx.beginPath(); ctx.arc(0,0,9,0,TAU); ctx.stroke();
+      ctx.restore();
+    }
+    // decori tematici per arena, ispirati a veri stadi di demolition derby
+    const dh=n=>Math.abs(Math.sin(n*7.91+arenaIdx*13.7)*43758.5453)%1;
+    if(arenaIdx===0){ // LANDA DI FERRO: rottami arrugginiti e lamiere
+      for(let i=0;i<7;i++){
+        const a=i*TAU/7+0.5, rad=R*(0.25+dh(i)*0.55);
+        ctx.save(); ctx.translate(Math.cos(a)*rad, Math.sin(a)*rad); ctx.rotate(a*1.7);
+        ctx.fillStyle='#3a2b1c'; ctx.fillRect(-26,-14,52,28);
+        ctx.fillStyle='#543a22'; ctx.fillRect(-30,-7,60,7);
+        ctx.fillStyle='#6e4b26'; ctx.beginPath(); ctx.arc(26,8,9,0,TAU); ctx.fill();
+        ctx.fillStyle='#241c12'; ctx.beginPath(); ctx.arc(-22,6,7,0,TAU); ctx.fill();
+        ctx.strokeStyle='#7a5a30'; ctx.lineWidth=3;
+        ctx.beginPath(); ctx.moveTo(-10,-16); ctx.lineTo(14,-24); ctx.stroke();
+        ctx.restore();
+      }
+    } else if(arenaIdx===1){ // DESERTO DI SASSI: massi, ossa e cespugli secchi
+      for(let i=0;i<9;i++){
+        const a=i*TAU/9+0.2, rad=R*(0.28+dh(i)*0.52);
+        const ox=Math.cos(a)*rad, oy=Math.sin(a)*rad, rs=14+dh(i+7)*26;
+        ctx.fillStyle='rgba(120,95,60,0.9)';
+        ctx.beginPath(); ctx.arc(ox,oy,rs,0,TAU); ctx.fill();
+        ctx.fillStyle='rgba(190,160,100,0.35)';
+        ctx.beginPath(); ctx.arc(ox-rs*0.3,oy-rs*0.3,rs*0.5,0,TAU); ctx.fill();
+      }
+      for(let i=0;i<4;i++){
+        const a=i*TAU/4+0.8, rad=R*(0.4+dh(i+3)*0.3);
+        const ox=Math.cos(a)*rad, oy=Math.sin(a)*rad;
+        ctx.strokeStyle='#7c8a4a'; ctx.lineWidth=5;
+        ctx.beginPath(); ctx.moveTo(ox,oy); ctx.lineTo(ox,oy-26); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ox,oy-14); ctx.lineTo(ox-10,oy-22); ctx.stroke();
+      }
+    } else if(arenaIdx===2){ // OFFICINA JUNK: carcasse, pallet e pozzetti d'olio
+      for(let i=0;i<5;i++){
+        const a=i*TAU/5+0.6, rad=R*(0.3+dh(i)*0.5);
+        ctx.save(); ctx.translate(Math.cos(a)*rad, Math.sin(a)*rad); ctx.rotate(a+1.2);
+        ctx.fillStyle='#26282e'; ctx.beginPath();
+        ctx.moveTo(-34,-12); ctx.lineTo(30,-15); ctx.lineTo(34,12); ctx.lineTo(-28,15); ctx.closePath(); ctx.fill();
+        ctx.fillStyle='#3a3e46'; ctx.fillRect(-30,-8,58,6);
+        ctx.fillStyle='#1b1d22'; ctx.beginPath(); ctx.arc(0,14,9,0,TAU); ctx.fill();
+        ctx.restore();
+      }
+      for(let i=0;i<6;i++){
+        const a=i*TAU/6+0.15, rad=R*(0.35+dh(i+2)*0.35);
+        const ox=Math.cos(a)*rad, oy=Math.sin(a)*rad;
+        ctx.fillStyle='rgba(20,16,12,0.55)';
+        ctx.beginPath(); ctx.ellipse(ox,oy,26,9,i,0,TAU); ctx.fill();
+        ctx.fillStyle='#4a4030';
+        ctx.fillRect(ox-22,oy-5,44,10); ctx.strokeStyle='#6b5c40'; ctx.lineWidth=2;
+        ctx.beginPath(); ctx.moveTo(ox-22,oy); ctx.lineTo(ox+22,oy); ctx.stroke();
+      }
+    } else { // ESAGONO DI GHIAIA: massi sparsi e ciottoli grossolani
+      for(let i=0;i<8;i++){
+        const a=i*TAU/8+0.4, rad=R*(0.22+dh(i)*0.6);
+        const ox=Math.cos(a)*rad, oy=Math.sin(a)*rad, rs=12+dh(i+5)*22;
+        ctx.fillStyle='#4e5c46';
+        ctx.beginPath(); ctx.ellipse(ox,oy,rs,rs*0.75,i,0,TAU); ctx.fill();
+        ctx.fillStyle='rgba(180,195,160,0.25)';
+        ctx.beginPath(); ctx.ellipse(ox-rs*0.3,oy-rs*0.25,rs*0.45,rs*0.3,i,0,TAU); ctx.fill();
+      }
+      for(let i=0;i<40;i++){
+        const a=i*TAU/40+dh(i)*0.3, rad=R*(0.3+dh(i+9)*0.55);
+        ctx.fillStyle=((i%3)===0)?'rgba(60,72,54,0.8)':'rgba(150,165,130,0.35)';
+        ctx.fillRect(Math.cos(a)*rad-3, Math.sin(a)*rad-3, 6, 6);
+      }
+    }
+    // punto "fuori dal muro" lungo la normale della forma dell'arena: così tribune e pubblico
+    // restano SEMPRE all'esterno (per l'ellisse l'anello a raggio fisso entrerebbe nel campo)
+    const standPt=(aA, off)=>{
+      let ed;
+      if(def.shape==='square'){
+        ed=R/Math.max(Math.abs(Math.cos(aA)),Math.abs(Math.sin(aA)));
+      } else if(def.shape==='ellipse'){
+        const rx=R*(def.kx||1), ry=R*(def.ky||1);
+        ed=rx*ry/Math.sqrt((ry*Math.cos(aA))**2+(rx*Math.sin(aA))**2);
+      } else {
+        ed=R;
+      }
+      return {x:Math.cos(aA)*(ed+off), y:Math.sin(aA)*(ed+off)};
+    };
+    // tribune: gradinate a settori colorati appena fuori dal muro (effetto stadio)
+    const seatCols=['#8a2645','#2b5598','#8a7a1f','#3f6b4c','#7d7d8a','#a8552a'];
+    for(let s=0;s<6;s++){
+      const a0=s*TAU/6;
+      for(let i=0;i<22;i++){
+        const a=a0+(i/22)*(TAU/6);
+        const p1=standPt(a,30), p2=standPt(a,46);
+        ctx.fillStyle=seatCols[s%seatCols.length];
+        ctx.fillRect(p1.x-7,p1.y-7,14,14);
+        ctx.fillStyle='rgba(0,0,0,0.28)';
+        ctx.fillRect(p2.x-7,p2.y-7,14,14);
+      }
+    }
+    // pubblico in piedi OLTRE il muro: ometti con corpo, testa e braccia che si agitano
+    const crowdT=performance.now()/1000;
+    const skinTones=['#f6cc9e','#e8ae7c','#c9905e','#a06d42','#7c5230','#5c3d22','#e6c9a4'];
+    const shirtTones=['#c0392b','#2980b9','#27ae60','#f39c12','#8e44ad','#16a085','#d35400','#95a5a6','#e74c3c','#2c3e50'];
+    for(let ring=0;ring<3;ring++){
+      const n=ring?34:40;
+      const off=74+ring*24;
+      for(let i=0;i<n;i++){
+        const a=i/n*TAU+ring*0.13;
+        const p=standPt(a,off);
+        const pr=((i*5+ring*7)%10)/10;
+        const bob=Math.max(0,Math.sin(crowdT*(2.4+ring*0.5)+i*1.8+ring))*4.5;
+        const sway=Math.sin(crowdT*1.6+a*4.1)*2;
+        const bb=p.y-bob*0.5;
+        // braccia alzate che agitano (metà del pubblico)
+        ctx.strokeStyle='#1d1a17'; ctx.lineWidth=2; ctx.lineCap='round';
+        ctx.beginPath();
+        if(pr>0.5){
+          const ar=Math.sin(crowdT*7+i*2.6)*0.7;
+          ctx.moveTo(p.x-7,p.y-20-bob); ctx.lineTo(p.x-10-ar*4,p.y-30+bob*0.2);
+          ctx.moveTo(p.x+7,p.y-20-bob); ctx.lineTo(p.x+10+ar*4,p.y-30+bob*0.2);
+        } else {
+          ctx.moveTo(p.x-7,p.y-16-bob); ctx.lineTo(p.x-9,p.y-26+bob*0.2);
+          ctx.moveTo(p.x+7,p.y-16-bob); ctx.lineTo(p.x+9,p.y-26+bob*0.2);
+        }
+        ctx.stroke();
+        // corpo
+        ctx.fillStyle=shirtTones[(i*5+ring*7)%shirtTones.length];
+        ctx.fillRect(p.x-6,p.y-16-bob,12,18);
+        ctx.fillStyle='rgba(0,0,0,0.18)'; ctx.fillRect(p.x-6,p.y-16-bob,12,3);
+        // testa
+        ctx.fillStyle=skinTones[(i*3+ring)%skinTones.length];
+        ctx.beginPath(); ctx.arc(p.x+sway*0.5,p.y-24-bob,5.4,0,TAU); ctx.fill();
+        ctx.fillStyle='rgba(0,0,0,0.25)';
+        ctx.beginPath(); ctx.arc(p.x+sway*0.5-1.6,p.y-25.5-bob,1.5,0,TAU); ctx.fill();
+      }
+    }
+    // striscioni e bandierine appese sul muro
+    for(let i=0;i<18;i++){
+      const a=i*TAU/18+0.15;
+      const fx=Math.cos(a)*(R+6), fy=Math.sin(a)*(R+6);
+      ctx.save(); ctx.translate(fx,fy); ctx.rotate(a);
+      const c=['#ffd24d','#ff5a6e','#4de3ff','#4dff88'][i%4];
+      ctx.fillStyle=c;
+      ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0,16); ctx.lineTo(8,8); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    // tabellone luminoso (jumbotron) su un lato dell'arena — cartellone DERBY in stile arcade
+    {
+      // progresso di entrata: scala 0.8→1 + fade-in con overshoot "bounce"
+      const entDur=380;
+      let entProg=(performance.now()-(jumboStart||0))/entDur;
+      if(entProg<0) entProg=0;
+      const entRaw=Math.min(entProg,1);
+      // easing con overshoot tipo cubic-bezier(0.34, 1.56, 0.64, 1)
+      const s0=entRaw<1? 1.70158 : 0;
+      const s1=s0+1;
+      const entScale = 1+s1*Math.pow(entRaw-1,3)+s0*Math.pow(entRaw-1,2);
+      const entAlpha=Math.min(entRaw*1.4,1);
+
+      const bx=0, by=-R*1.22, bw=R*0.36, bh=R*0.095;
+      const t=performance.now()/1000;
+      const pulse=0.5+Math.sin(t*2.2)*0.5;
+      ctx.save();
+      ctx.globalAlpha=entAlpha;
+      ctx.translate(bx,by);
+
+      // helper arrotondato (sostituisce emoji/bordi piatti)
+      const rr=(x,y,wW,hH,rR)=>{
+        rR=Math.min(rR,wW/2,hH/2);
+        ctx.beginPath();
+        ctx.moveTo(x+rR,y);
+        ctx.arcTo(x+wW,y,x+wW,y+hH,rR);
+        ctx.arcTo(x+wW,y+hH,x,y+hH,rR);
+        ctx.arcTo(x,y+hH,x,y,rR);
+        ctx.arcTo(x,y,x+wW,y,rR);
+        ctx.closePath();
+      };
+
+      // ombra esterna per staccare il tabellone dallo sfondo
+      ctx.save();
+      const boxSh=ctx.createRadialGradient(0,0,0,0,0,bw*0.7);
+      boxSh.addColorStop(0,'rgba(0,0,0,0.55)');
+      boxSh.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=boxSh;
+      ctx.beginPath();
+      ctx.ellipse(0,bh*0.5+8,bw*0.75,bh*0.6,0,0,TAU); ctx.fill();
+      ctx.restore();
+
+      // fondo con gradiente scuro (#1a1a1a → #2d2d2d)
+      const bg=ctx.createLinearGradient(0,-bh/2-10,0,bh/2+10);
+      bg.addColorStop(0,'#1a1a1a');
+      bg.addColorStop(0.5,'#242424');
+      bg.addColorStop(1,'#2d2d2d');
+      ctx.fillStyle=bg;
+      ctx.save();
+      ctx.translate(0,0); ctx.scale(entScale,entScale);
+      ctx.shadowColor='rgba(0,0,0,0.85)'; ctx.shadowBlur=14; ctx.shadowOffsetY=6;
+      rr(-bw/2-12,-bh/2-14,bw+24,bh+28,10);
+      ctx.fill();
+      ctx.shadowBlur=0;
+      // bordo esterno dorato sottile (#d4af37)
+      ctx.strokeStyle='#d4af37'; ctx.lineWidth=2;
+      rr(-bw/2-12,-bh/2-14,bw+24,bh+28,10); ctx.stroke();
+      // bordo interno più chiaro per effetto rilievo
+      ctx.strokeStyle='rgba(255,255,255,0.18)'; ctx.lineWidth=1;
+      rr(-bw/2-8,-bh/2-10,bw+16,bh+20,8); ctx.stroke();
+      ctx.restore();
+      // schermo interno
+      const scr=ctx.createLinearGradient(0,-bh/2,0,bh/2);
+      scr.addColorStop(0,'#0d0d0f'); scr.addColorStop(0.7,'#14161c'); scr.addColorStop(1,'#1f1718');
+      ctx.fillStyle=scr;
+      rr(-bw/2,-bh/2,bw,bh,6); ctx.fill();
+      // bordo dorato del display che pulsa
+      ctx.strokeStyle='rgba(212,175,55,'+(0.35+0.5*pulse)+')'; ctx.lineWidth=2;
+      rr(-bw/2,-bh/2,bw,bh,6); ctx.stroke();
+      // alone laterale dorato/ciano
+      ctx.globalCompositeOperation='lighter';
+      const ag=ctx.createLinearGradient(0,-bh/2,0,-bh/2-16);
+      ag.addColorStop(0,'rgba(212,175,55,'+(0.3+0.4*pulse)+')'); ag.addColorStop(1,'rgba(212,175,55,0)');
+      ctx.fillStyle=ag; ctx.fillRect(-bw/2,-bh/2-16,bw,16);
+      ctx.globalCompositeOperation='source-over';
+      // riflesso specchiante superiore
+      const topShine=ctx.createLinearGradient(0,-bh/2,0,-bh/2+8);
+      topShine.addColorStop(0,'rgba(255,255,255,0.14)'); topShine.addColorStop(1,'rgba(255,255,255,0)');
+      ctx.fillStyle=topShine; ctx.fillRect(-bw/2,-bh/2,bw,8);
+
+      // trofeo in oro (disegnato a mano, niente emoji) con gradiente oro
+      const cupX=-bw*0.36, cupY=bh*0.02, cupS=bh*0.42;
+      const cupGlow2=ctx.createRadialGradient(cupX,cupY,0,cupX,cupY,cupS*1.9);
+      cupGlow2.addColorStop(0,'rgba(255,215,120,'+(0.35+0.25*pulse)+')');
+      cupGlow2.addColorStop(1,'rgba(255,215,120,0)');
+      ctx.fillStyle=cupGlow2;
+      ctx.beginPath(); ctx.arc(cupX,cupY,cupS*1.9,0,TAU); ctx.fill();
+      ctx.save(); ctx.translate(cupX,cupY);
+      const cupGrad=ctx.createLinearGradient(0,-cupS,cupS*0.4,cupS);
+      cupGrad.addColorStop(0,'#fff5d0'); cupGrad.addColorStop(0.45,'#ffd24d'); cupGrad.addColorStop(1,'#b8860b');
+      ctx.fillStyle=cupGrad;
+      ctx.strokeStyle='#7a5a09'; ctx.lineWidth=1;
+      // boccia del trofeo
+      ctx.beginPath(); ctx.arc(0,-cupS*0.5,cupS*0.55,0,TAU); ctx.fill(); ctx.stroke();
+      // manici
+      ctx.fillRect(-cupS*0.78,-cupS*0.32,cupS*0.09,cupS*0.52);
+      ctx.fillRect(cupS*0.69,-cupS*0.32,cupS*0.09,cupS*0.52);
+      // stelo
+      ctx.fillRect(-cupS*0.11,-cupS*0.28,cupS*0.22,cupS*0.5);
+      // piedistallo
+      ctx.fillRect(-cupS*0.5,cupS*0.22,cupS*1.0,cupS*0.14);
+      ctx.fillRect(-cupS*0.3,cupS*0.34,cupS*0.6,cupS*0.10);
+      // luce sulla boccia
+      ctx.fillStyle='rgba(255,255,255,0.7)';
+      ctx.beginPath(); ctx.arc(-cupS*0.16,-cupS*0.66,cupS*0.1,0,TAU); ctx.fill();
+      ctx.restore();
+      // sottili raggi dorati dal trofeo
+      ctx.globalCompositeOperation='lighter';
+      for(let i=0;i<4;i++){
+        const sa=t*0.5+i*1.57;
+        ctx.strokeStyle='rgba(212,175,55,'+(0.10+0.12*pulse)+')';
+        ctx.lineWidth=1.2; ctx.beginPath();
+        ctx.moveTo(cupX+Math.cos(sa)*cupS*0.7, cupY+Math.sin(sa)*cupS*0.7);
+        ctx.lineTo(cupX+Math.cos(sa)*cupS*1.5, cupY+Math.sin(sa)*cupS*1.5);
+        ctx.stroke();
+      }
+      ctx.globalCompositeOperation='source-over';
+
+      // scritta DERBY: font bold condensato, gradiente oro, glow multiplo, letter-spacing ampio
+      ctx.save();
+      ctx.scale(entScale,entScale);
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      const derbyFontSize=Math.round(R*0.038);
+      ctx.font='900 '+derbyFontSize+'px "Arial Black", Impact, Arial, monospace';
+      const spacing=R*0.012;
+      const derbyText='DERBY';
+      let totW=0;
+      ctx.font='bold '+derbyFontSize+'px "Arial Black", Impact, sans-serif';
+      for(let i=0;i<derbyText.length;i++) totW+=ctx.measureText(derbyText[i]).width;
+      totW+=(derbyText.length-1)*spacing - bw*0.06;
+      let pen=-totW/2 + bw*0.22;
+      ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=8; ctx.shadowOffsetY=3;
+      for(let i=0;i<derbyText.length;i++){
+        const ch=derbyText[i];
+        const wob=Math.sin(t*3.2+i*0.9)*1.5;
+        const lg2=ctx.createLinearGradient(0,-derbyFontSize*0.6,0,derbyFontSize*0.4);
+        // gradiente oro da chiaro #ffd700 a scuro #b8860b
+        lg2.addColorStop(0,'#ffe680'); lg2.addColorStop(0.32,'#ffd700'); lg2.addColorStop(0.75,'#d4a017'); lg2.addColorStop(1,'#b8860b');
+        ctx.fillStyle=lg2;
+        ctx.save(); ctx.translate(pen, -8+wob*0.35);
+        ctx.fillText(ch,0,0);
+        ctx.restore();
+        pen+=ctx.measureText(ch).width+spacing;
+      }
+      // glow oro esterno (secondo passaggio più morbido, stesse posizioni)
+      ctx.shadowColor='rgba(255,200,80,0.65)'; ctx.shadowBlur=14; ctx.shadowOffsetY=0;
+      let pen2=-totW/2 + bw*0.22;
+      for(let i=0;i<derbyText.length;i++){
+        const ch=derbyText[i];
+        const wob2=Math.sin(t*3.2+i*0.9)*1.5;
+        const lg2=ctx.createLinearGradient(0,-derbyFontSize*0.6,0,derbyFontSize*0.4);
+        lg2.addColorStop(0,'#fff0a8'); lg2.addColorStop(1,'#e6b800');
+        ctx.fillStyle=lg2;
+        ctx.save(); ctx.translate(pen2, -8+wob2*0.35);
+        ctx.fillText(ch,0,0);
+        ctx.restore();
+        pen2+=ctx.measureText(ch).width+spacing;
+      }
+      ctx.shadowBlur=0;
+
+      // sottotitolo unico in stile arcade (cyan chiaro)
+      const subGlow=0.45+0.4*Math.sin(t*3.1);
+      ctx.shadowColor='rgba(77,227,255,0.9)'; ctx.shadowBlur=8+5*subGlow;
+      ctx.fillStyle='rgba(140,238,255,'+(0.6+0.4*subGlow)+')';
+      ctx.font='bold '+Math.round(R*0.019)+'px monospace';
+      ctx.fillText(over ? 'GARA FINITA' : 'DISTRUGGI I TUOI AVVERSARI', 0, bh*0.5+4);
+      ctx.shadowBlur=0;
+      // scintillio diagonale che attraversa lo schermo
+      const shX=((t*60)%(bw+bh*6))-bh*3;
+      const shimmer=ctx.createLinearGradient(shX,-bh/2,shX+bh*6,bh/2);
+      shimmer.addColorStop(0,'rgba(255,255,255,0)');
+      shimmer.addColorStop(0.5,'rgba(255,255,255,0.09)');
+      shimmer.addColorStop(1,'rgba(255,255,255,0)');
+      ctx.fillStyle=shimmer; ctx.fillRect(-bw/2,-bh/2,bw,bh);
+      ctx.restore();
       ctx.restore();
     }
     // muro
@@ -3012,7 +4049,7 @@ ctx.strokeStyle='rgba(255,255,255,0.10)'; ctx.lineWidth=3; ctx.setLineDash([22,3
 
   function drawCar(c, mark){
     const f=focus();
-    const camX=f?f.x:0, camY=f?f.y:0;
+    const camX=(f?f.x:0)+curShX, camY=(f?f.y:0)+curShY;
     const sx=canvas.width/2+(c.x-camX)*viewScale;
     const sy=canvas.height/2+(c.y-camY)*viewScale;
     const r=P.carR;
@@ -3029,9 +4066,44 @@ ctx.strokeStyle='rgba(255,255,255,0.10)'; ctx.lineWidth=3; ctx.setLineDash([22,3
       ctx.fillStyle='#222'; ctx.fillRect(-r*0.9,-r*0.3,r*1.8,r*0.6);
     }
 if(c.destroyed){
-      ctx.globalAlpha=0.45; ctx.fillStyle='#26262a'; ctx.fillRect(-r*1.9,-r*1.9,r*3.8,r*3.8); ctx.globalAlpha=1;
-      ctx.fillStyle='#241d12'; ctx.fillRect(-r,-r*0.3,r*2,r*0.35);
-}
+      // la macchina si scurisce e basta (solo lo sprite, nessun quadrato/cerchio attorno)
+      ctx.filter='brightness(0.42) saturate(0.45)';
+      if(img && img.complete && img.naturalWidth>0){
+        ctx.drawImage(img,-r*1.9,-r*1.9,r*3.8,r*3.8);
+      } else {
+        ctx.fillStyle='#4a1616'; ctx.fillRect(-r,-r*0.42,r*2,r*0.84);
+        ctx.fillStyle='#181818'; ctx.fillRect(-r*0.9,-r*0.3,r*1.8,r*0.6);
+      }
+      ctx.filter='none';
+      // fumo nero che esce dal cofano e sale verso l'alto, con deriva e ondulazione
+      const t2=performance.now()/1000;
+      for(let k=0;k<7;k++){
+        const ph=((performance.now()*0.045)+k*37)%100;
+        const rise=ph*0.15;
+        const ox2=Math.sin(ph*0.05+k*1.3)*r*0.55 + Math.sin(t2*0.8+k)*r*0.06;
+        const oy2=-r*0.35-rise - (k%3)*r*0.16;
+        const rad=r*(0.15+ph*0.03);
+        const al=0.32*(1-ph/100);
+        const sg=ctx.createRadialGradient(ox2,oy2,0,ox2,oy2,rad);
+        sg.addColorStop(0,`rgba(32,32,36,${al})`);
+        sg.addColorStop(0.7,`rgba(45,45,50,${al*0.6})`);
+        sg.addColorStop(1,'rgba(45,45,50,0)');
+        ctx.fillStyle=sg;
+        ctx.beginPath(); ctx.arc(ox2,oy2,rad,0,TAU); ctx.fill();
+      }
+      // leggera brace arancione sul cofano, solo lampi deboli senza cerchi fluttuanti
+      ctx.globalCompositeOperation='lighter';
+      for(let k=0;k<3;k++){
+        const bx=-r*0.8+k*r*0.8, by=-r*0.3+Math.sin(t2*7+k*2.1)*r*0.05;
+        const br=r*(0.10+0.06*Math.sin(t2*9+k*1.7));
+        const bg2=ctx.createRadialGradient(bx,by,0,bx,by,br);
+        bg2.addColorStop(0,`rgba(255,120,30,${0.20+0.15*Math.sin(t2*11+k)})`);
+        bg2.addColorStop(1,'rgba(255,60,0,0)');
+        ctx.fillStyle=bg2;
+        ctx.beginPath(); ctx.arc(bx,by,br,0,TAU); ctx.fill();
+      }
+      ctx.globalCompositeOperation='source-over';
+    }
     if(c.dirt>0.05){
       const d=c.dirt;
       // macchie di fango a chiazze sotto il parabrezza, senza nessun rettangolo
@@ -3067,17 +4139,57 @@ if(c.destroyed){
 
   function drawParticles(){
     const f=focus();
-    const camX=f?f.x:0, camY=f?f.y:0;
+    const camX=(f?f.x:0)+curShX, camY=(f?f.y:0)+curShY;
     for(const p of particles){
       const a=clamp(p.life/p.max,0,1);
       const px=canvas.width/2+(p.x-camX)*viewScale;
       const py=canvas.height/2+(p.y-camY)*viewScale;
-if(p.kind==='spark'){
+      if(p.kind==='spark'){
+        ctx.globalCompositeOperation='lighter';
         ctx.fillStyle='rgba(255,'+Math.floor(200+55*a)+',80,'+a+')';
         ctx.fillRect(px,py,p.size,p.size);
+        ctx.globalCompositeOperation='source-over';
+      } else if(p.kind==='flash'){
+        ctx.globalCompositeOperation='lighter';
+        const r=p.size*a+2;
+        const g=ctx.createRadialGradient(px,py,0,px,py,r);
+        g.addColorStop(0,'rgba(255,250,225,'+(0.9*a)+')');
+        g.addColorStop(0.4,'rgba(255,220,140,'+(0.45*a)+')');
+        g.addColorStop(1,'rgba(255,170,60,0)');
+        ctx.fillStyle=g; ctx.beginPath(); ctx.arc(px,py,r,0,TAU); ctx.fill();
+        ctx.globalCompositeOperation='source-over';
+      } else if(p.kind==='ring'){
+        ctx.globalCompositeOperation='lighter';
+        const r=p.size*(1.6-a*0.6);
+        ctx.strokeStyle='rgba(255,214,120,'+(0.5*a)+')';
+        ctx.lineWidth=2.2*a+0.4;
+        ctx.beginPath(); ctx.arc(px,py,r,0,TAU); ctx.stroke();
+        ctx.strokeStyle='rgba(255,120,50,'+(0.3*a)+')';
+        ctx.lineWidth=5*a;
+        ctx.beginPath(); ctx.arc(px,py,r*0.8,0,TAU); ctx.stroke();
+        ctx.globalCompositeOperation='source-over';
+      } else if(p.kind==='ember'){
+        ctx.globalCompositeOperation='lighter';
+        const gr=p.size*a;
+        const g=ctx.createRadialGradient(px,py,0,px,py,gr+3);
+        g.addColorStop(0,'rgba(255,'+Math.floor(150+80*a)+',60,'+(0.85*a)+')');
+        g.addColorStop(1,'rgba(255,80,20,0)');
+        ctx.fillStyle=g; ctx.beginPath(); ctx.arc(px,py,gr+3,0,TAU); ctx.fill();
+        ctx.globalCompositeOperation='source-over';
+      } else if(p.kind==='debris'){
+        ctx.fillStyle='rgba('+p.gray+','+(p.gray-10)+','+(p.gray-16)+','+(0.7*a)+')';
+        ctx.save(); ctx.translate(px,py); ctx.rotate(p.life*8);
+        ctx.fillRect(-p.size,-p.size*0.6,p.size*2,p.size*1.2);
+        ctx.restore();
       } else if(p.kind==='fire'){
-        ctx.fillStyle='rgba(255,'+Math.floor(120+80*a)+',30,'+(0.8*a)+')';
-        ctx.beginPath(); ctx.arc(px,py,p.size*a+1,0,TAU); ctx.fill();
+        ctx.globalCompositeOperation='lighter';
+        const fr=p.size*a+1;
+        const g=ctx.createRadialGradient(px,py,0,px,py,fr*2.2);
+        g.addColorStop(0,'rgba(255,'+Math.floor(150+80*a)+',30,'+(0.8*a)+')');
+        g.addColorStop(0.5,'rgba(255,120,20,'+(0.45*a)+')');
+        g.addColorStop(1,'rgba(255,60,0,0)');
+        ctx.fillStyle=g; ctx.beginPath(); ctx.arc(px,py,fr*2.2,0,TAU); ctx.fill();
+        ctx.globalCompositeOperation='source-over';
       } else if(p.kind==='dirt'){
         ctx.fillStyle='rgba('+Math.round(120+a*50)+','+Math.round(86+a*36)+',54,'+(0.55*a)+')';
         ctx.beginPath(); ctx.arc(px,py,p.size*a+2,0,TAU); ctx.fill();
@@ -3092,12 +4204,13 @@ if(p.kind==='spark'){
 function drawWeather(){
     const list=curList(); const s=curSlot();
     const f=(s>=0&&list[s])?list[s]:null;
-    const camX=f?f.x:0, camY=f?f.y:0;
+    const camX=(f?f.x:0)+curShX, camY=(f?f.y:0)+curShY;
     const w=canvas.width, h=canvas.height;
     const toScr=world=>{ return {sx:w/2+(world.x-camX)*viewScale, sy:h/2+(world.y-camY)*viewScale}; };
     const lightCars=[];
     for(const c of list){ if(!c.destroyed) lightCars.push({x:c.x,y:c.y,heading:c.heading}); }
     if(weatherSel==='night'){
+      StormFX.tick(false);
       ctx.fillStyle='rgba(0,0,0,0.42)'; ctx.fillRect(0,0,w,h);
       drawCarLights(lightCars, 1, toScr);
       const starCount=350, seed=42;
@@ -3110,6 +4223,36 @@ function drawWeather(){
         ctx.beginPath(); ctx.arc(sx,sy,sz,0,TAU); ctx.fill();
       }
       ctx.globalAlpha=1;
+      // luna con alone e crateri
+      const mx=w*0.84, my=h*0.16, mr=Math.min(w,h)*0.05;
+      const mg=ctx.createRadialGradient(mx,my,mr*0.2,mx,my,mr*3);
+      mg.addColorStop(0,'rgba(230,235,255,0.14)');
+      mg.addColorStop(0.4,'rgba(210,220,250,0.05)');
+      mg.addColorStop(1,'rgba(210,220,250,0)');
+      ctx.fillStyle=mg; ctx.beginPath(); ctx.arc(mx,my,mr*3,0,TAU); ctx.fill();
+      ctx.fillStyle='#e8ecf7'; ctx.beginPath(); ctx.arc(mx,my,mr,0,TAU); ctx.fill();
+      ctx.fillStyle='#c9d0e2';
+      ctx.beginPath(); ctx.arc(mx-mr*0.3,my-mr*0.2,mr*0.22,0,TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(mx+mr*0.25,my+mr*0.3,mr*0.16,0,TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(mx+mr*0.4,my-mr*0.35,mr*0.1,0,TAU); ctx.fill();
+      // stelle cadenti
+      if(derbyStars==null) derbyStars=[];
+      if(derbyStars.length===0 && Math.random()<0.006){
+        derbyStars.push({x:rand(w*0.1,w*0.9), y:rand(h*0.05,h*0.25), vx:rand(520,780), vy:rand(160,260), life:1});
+      }
+      const sdt=clamp((performance.now()-lastRainT)/1000,0,0.05);
+      for(let i=derbyStars.length-1;i>=0;i--){
+        const ss=derbyStars[i];
+        ss.x+=ss.vx*sdt; ss.y+=ss.vy*sdt; ss.life-=1.6*sdt;
+        if(ss.life<=0){ derbyStars.splice(i,1); continue; }
+        ctx.strokeStyle=`rgba(255,255,255,${0.85*ss.life})`; ctx.lineWidth=2;
+        ctx.beginPath();
+        ctx.moveTo(ss.x,ss.y);
+        ctx.lineTo(ss.x-ss.vx*0.16, ss.y-ss.vy*0.16);
+        ctx.stroke();
+        ctx.fillStyle=`rgba(255,255,255,${ss.life})`;
+        ctx.beginPath(); ctx.arc(ss.x,ss.y,2,0,TAU); ctx.fill();
+      }
     } else if(weatherSel==='fog'){
       const fogTime=performance.now()/1000;
       const cx=w/2, cy=h/2;
@@ -3118,29 +4261,54 @@ function drawWeather(){
       baseG.addColorStop(0.45,'rgba(168,176,192,0.16)');
       baseG.addColorStop(1,'rgba(186,193,208,0.28)');
       ctx.fillStyle=baseG; ctx.fillRect(0,0,w,h);
-      const bankCount=4;
+      // Fasci di luce che filtrano dall'alto (light shafts)
+      ctx.save(); ctx.globalCompositeOperation='lighter';
+      const gx0=w*0.42+Math.sin(fogTime*0.12)*w*0.06, gy0=-h*0.08;
+      for(let i=0;i<4;i++){
+        const ang=Math.PI/2+(i-1.5)*0.24+Math.sin(fogTime*0.15+i*1.9)*0.05;
+        const len=Math.max(w,h)*0.8;
+        const sp=0.14+((i*0.37)%1)*0.05;
+        ctx.save();
+        ctx.translate(gx0,gy0); ctx.rotate(ang);
+        const rg=ctx.createLinearGradient(0,0,0,len);
+        rg.addColorStop(0,'rgba(255,252,240,0.055)');
+        rg.addColorStop(0.6,'rgba(255,250,238,0.028)');
+        rg.addColorStop(1,'rgba(255,250,238,0)');
+        ctx.fillStyle=rg;
+        ctx.beginPath();
+        ctx.moveTo(-sp*len*0.3,0);
+        ctx.lineTo(sp*len*0.3,0);
+        ctx.lineTo(sp*len*0.12,len);
+        ctx.lineTo(-sp*len*0.12,len);
+        ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
+      ctx.restore();
+      // banchi di nebbia che derivano lentamente
+      const bankCount=5;
       for(let i=0;i<bankCount;i++){
-        const spd=0.015+i*0.005;
-        const px=((i*0.618)*w*0.6+fogTime*spd*w)%(w*1.5)-w*0.25;
-        const py=h*(0.52+Math.sin(i*2.1+fogTime*0.08)*0.20)+Math.cos(i*1.7+fogTime*0.05)*50;
-        const pr=(0.38+0.22*Math.sin(i*3.7))*Math.max(w,h);
-        const a=Math.max(0,0.05+0.03*Math.sin(i*2.4+fogTime*0.3));
+        const spd=0.012+i*0.005;
+        const px=((i*0.618)*w*0.6+fogTime*spd*w)%(w*1.6)-w*0.3;
+        const py=h*(0.52+Math.sin(i*2.1+fogTime*0.08)*0.22)+Math.cos(i*1.7+fogTime*0.05)*55;
+        const pr=(0.36+0.24*Math.sin(i*3.7))*Math.max(w,h);
+        const a=Math.max(0,0.055+0.035*Math.sin(i*2.4+fogTime*0.3));
         const g=ctx.createRadialGradient(px,py,0,px,py,pr);
-        g.addColorStop(0,`rgba(198,204,218,${a})`);
-        g.addColorStop(0.6,`rgba(198,204,218,${a*0.4})`);
-        g.addColorStop(1,'rgba(198,204,218,0)');
+        g.addColorStop(0,`rgba(200,206,220,${a})`);
+        g.addColorStop(0.6,`rgba(198,204,218,${a*0.45})`);
+        g.addColorStop(1,'rgba(196,202,216,0)');
         ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
       }
+      // volute soffici a strati
       for(let layer=0;layer<3;layer++){
-        const layerAlpha=0.12+layer*0.05;
-        const layerSpeed=0.22+layer*0.14;
+        const layerAlpha=0.11+layer*0.05;
+        const layerSpeed=0.20+layer*0.14;
         const seed=layer*137.7;
         const count=14-layer*2;
         for(let i=0;i<count;i++){
           const baseX=(Math.sin(i*13.7+seed*0.618)*0.5+0.5)*w;
           const baseY=(Math.cos(i*9.2-seed*1.13)*0.5+0.5)*h;
-          const drift=Math.sin(fogTime*layerSpeed*0.5+i*1.3)*90;
-          const fy=baseY+Math.sin(fogTime*0.4+i*0.8)*45;
+          const drift=Math.sin(fogTime*layerSpeed*0.5+i*1.3)*110+fogTime*layerSpeed*40;
+          const fy=baseY+Math.sin(fogTime*0.4+i*0.8)*50;
           const pulse=0.8+0.2*Math.sin(fogTime*layerSpeed+i*2.2);
           const frx=(110+Math.sin(i*7.1)*55)*pulse;
           const fry=(36+Math.cos(i*5.3)*18)*pulse;
@@ -3156,6 +4324,16 @@ function drawWeather(){
           ctx.restore();
         }
       }
+      // nebbiolina fine rasente al suolo
+      ctx.strokeStyle='rgba(190,198,212,0.06)'; ctx.lineWidth=1;
+      ctx.beginPath();
+      for(let i=0;i<36;i++){
+        const mx2=((i*61.9+fogTime*45)%(w+220))-110;
+        const my2=h*0.72+Math.sin(fogTime*0.5+i*2.3)*28+((i*37.7)%1)*h*0.22;
+        ctx.moveTo(mx2,my2); ctx.lineTo(mx2-44,my2-7);
+      }
+      ctx.stroke();
+      // vignettatura lattiginosa
       const maxR=Math.hypot(w,h)/2;
       const g=ctx.createRadialGradient(cx,cy,0,cx,cy,maxR);
       g.addColorStop(0,'rgba(188,194,206,0)');
@@ -3167,48 +4345,179 @@ function drawWeather(){
       const frameDt=clamp((now-lastRainT)/1000,0,0.05);
       lastRainT=now;
       const count=weatherSel==='rain-h'?350:200;
+      const heavy=weatherSel==='rain-h';
       if(!derbyRain) derbyRain=[];
       while(derbyRain.length<count) derbyRain.push({x:Math.random()*w, y:Math.random()*h, len:rand(10,28), spd:rand(800,1300), vx:rand(-60,60)});
       if(derbyRain.length>count) derbyRain.length=count;
-      ctx.fillStyle = weatherSel==='rain-h' ? 'rgba(8,14,28,.38)' : 'rgba(18,28,48,.22)';
-      ctx.fillRect(0,0,w,h);
-      ctx.strokeStyle = weatherSel==='rain-h' ? 'rgba(150,190,235,.45)' : 'rgba(180,215,255,.30)';
-      ctx.lineWidth = weatherSel==='rain-h' ? 1.5 : 1.1;
-      ctx.beginPath();
+      // cielo plumbeo a gradiente
+      const skyG=ctx.createLinearGradient(0,0,0,h);
+      if(heavy){
+        skyG.addColorStop(0,'rgba(8,14,30,.58)');
+        skyG.addColorStop(0.55,'rgba(12,18,34,.44)');
+        skyG.addColorStop(1,'rgba(20,28,46,.30)');
+      } else {
+        skyG.addColorStop(0,'rgba(14,22,42,.34)');
+        skyG.addColorStop(0.55,'rgba(18,26,44,.26)');
+        skyG.addColorStop(1,'rgba(26,34,52,.16)');
+      }
+      ctx.fillStyle=skyG; ctx.fillRect(0,0,w,h);
+      // fulmine: alone radiale + ramo con ramificazioni (pioggia forte)
+      const fl=StormFX.tick(heavy);
+      if(fl>0.02){
+        const flashA=Math.min(0.5, fl*0.55);
+        const fg=ctx.createRadialGradient(w/2,h*0.15,0,w/2,h*0.15,Math.max(w,h)*0.7);
+        fg.addColorStop(0,`rgba(215,230,255,${flashA})`);
+        fg.addColorStop(1,'rgba(215,230,255,0)');
+        ctx.fillStyle=fg; ctx.fillRect(0,0,w,h);
+        if(fl>0.55){
+          const bx=rand(w*0.2,w*0.8), by=rand(h*0.05,h*0.2);
+          const bolts=[]; let px2=bx, py2=by;
+          for(let k=1;k<8;k++){
+            const nx2=px2+rand(-55,55)*(0.3+0.12*k), ny2=py2+32+Math.random()*16;
+            bolts.push([px2,py2,nx2,ny2]); px2=nx2; py2=ny2;
+          }
+          ctx.strokeStyle=`rgba(255,255,255,${fl*0.95})`; ctx.lineWidth=3;
+          ctx.shadowColor='rgba(180,210,255,0.9)'; ctx.shadowBlur=14;
+          ctx.beginPath();
+          for(const b of bolts){ ctx.moveTo(b[0],b[1]); ctx.lineTo(b[2],b[3]); }
+          ctx.stroke();
+          ctx.shadowBlur=0;
+          ctx.strokeStyle=`rgba(160,200,255,${fl*0.5})`; ctx.lineWidth=1.2;
+          for(const b of bolts){
+            const mx=(b[0]+b[2])/2, my=(b[1]+b[3])/2;
+            ctx.beginPath();
+            ctx.moveTo(mx,my);
+            ctx.lineTo(mx+rand(-40,40), my+28+Math.random()*20);
+            ctx.stroke();
+          }
+        }
+      }
+      // aggiorna le gocce
       for(const d of derbyRain){
         d.y+=d.spd*frameDt; d.x+=d.vx*frameDt;
-        if(d.y>h+28){ d.y=-28; d.x=Math.random()*w; }
-        if(d.x>w+28) d.x=-28; if(d.x<-28) d.x=w+28;
-        ctx.moveTo(d.x,d.y); ctx.lineTo(d.x-d.vx*0.04, d.y-d.len);
+        if(d.y>h+30){ d.y=-30; d.x=Math.random()*w; }
+        if(d.x>w+30) d.x=-30; if(d.x<-30) d.x=w+30;
+      }
+      // strato lontano: puntini corti e attenuati
+      const cntFar=Math.floor(count*0.3), cntMid=Math.floor(count*0.4);
+      ctx.strokeStyle = heavy ? 'rgba(150,190,235,.15)' : 'rgba(180,215,255,.10)';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      for(let i=0;i<cntFar;i++){
+        const d=derbyRain[i];
+        ctx.moveTo(d.x, d.y-d.len*0.5); ctx.lineTo(d.x, d.y);
       }
       ctx.stroke();
-      ctx.fillStyle='rgba(160,200,240,.08)';
-      for(let i=0;i<count;i+=2){
+      // strato intermedio
+      ctx.strokeStyle = heavy ? 'rgba(150,190,235,.32)' : 'rgba(180,215,255,.22)';
+      ctx.lineWidth = heavy ? 1.2 : 1;
+      ctx.beginPath();
+      for(let i=cntFar;i<cntFar+cntMid;i++){
         const d=derbyRain[i];
-        ctx.fillRect(d.x-1.5,d.y+d.len,3,5);
+        ctx.moveTo(d.x, d.y-d.len); ctx.lineTo(d.x, d.y);
+      }
+      ctx.stroke();
+      // strato vicino: strisce lunghe e luminose con inclinazione da vento
+      ctx.strokeStyle = heavy ? 'rgba(190,220,255,.60)' : 'rgba(200,225,255,.42)';
+      ctx.lineWidth = heavy ? 1.8 : 1.4;
+      ctx.lineCap='round';
+      ctx.beginPath();
+      for(let i=cntFar+cntMid;i<count;i++){
+        const d=derbyRain[i];
+        ctx.moveTo(d.x-d.vx*0.05, d.y-d.len); ctx.lineTo(d.x, d.y);
+      }
+      ctx.stroke();
+      ctx.lineCap='butt';
+      // increspature: doppio cerchio + macchia interna
+      if(Math.random()<0.45 && derbyRipples.length<40){
+        derbyRipples.push({x:Math.random()*w, y:Math.random()*h, r:2+Math.random()*4, life:1});
+      }
+      for(let i=derbyRipples.length-1;i>=0;i--){
+        const rr=derbyRipples[i];
+        rr.r += 30*frameDt; rr.life -= 1.3*frameDt;
+        if(rr.life<=0){ derbyRipples.splice(i,1); continue; }
+        ctx.strokeStyle=`rgba(170,205,240,${0.3*rr.life})`; ctx.lineWidth=1.4;
+        ctx.beginPath(); ctx.arc(rr.x,rr.y,rr.r,0,TAU); ctx.stroke();
+        ctx.strokeStyle=`rgba(170,205,240,${0.15*rr.life})`; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.arc(rr.x,rr.y,rr.r*0.6,0,TAU); ctx.stroke();
+        ctx.fillStyle=`rgba(180,210,245,${0.05*rr.life})`;
+        ctx.beginPath(); ctx.arc(rr.x,rr.y,rr.r*0.5,0,TAU); ctx.fill();
       }
       if(!derbySplashes){
         derbySplashes=[];
         const r=arenaR()*0.9;
         for(let i=0;i<40;i++) derbySplashes.push({x:-r+Math.random()*r*2, y:-r+Math.random()*r*2, r:rand(3,10), a:rand(0.1,0.25)});
       }
-      ctx.fillStyle='rgba(120,160,200,.12)';
+      // pozzanghere sul terreno con riflesso del cielo
+      ctx.fillStyle='rgba(140,180,225,.16)';
       for(const sp of derbySplashes){
         const q=toScr(sp);
         ctx.beginPath(); ctx.ellipse(q.sx,q.sy,sp.r,sp.r*0.6,0,0,TAU); ctx.fill();
       }
+      // riflesso specchiante dell'asfalto bagnato
+      const wetG=ctx.createLinearGradient(0,h*0.6,0,h);
+      wetG.addColorStop(0,'rgba(160,195,235,0)');
+      wetG.addColorStop(1, heavy?'rgba(160,195,235,.10)':'rgba(160,195,235,.06)');
+      ctx.fillStyle=wetG; ctx.fillRect(0,h*0.6,w,h*0.4);
       drawCarLights(lightCars, 0.85, toScr);
     } else if(weatherSel==='sun'){
-      const g=ctx.createRadialGradient(w/2,h/2,0,w/2,h/2,Math.hypot(w,h)/2);
-      g.addColorStop(0,'rgba(255,215,140,0)');
-      g.addColorStop(0.6,'rgba(255,210,130,0.04)');
-      g.addColorStop(1,'rgba(255,200,110,0.10)');
-      ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
-      const sunGlow=ctx.createRadialGradient(w/2,h*0.35,0,w/2,h*0.35,200);
-      sunGlow.addColorStop(0,'rgba(255,230,160,0.08)');
-      sunGlow.addColorStop(1,'rgba(255,220,140,0)');
-      ctx.fillStyle=sunGlow; ctx.fillRect(0,0,w,h);
+      StormFX.tick(false);
+      const t=performance.now()/1000;
+      // caldo ambientale: tonalità dorata che avvolge tutta la scena
+      ctx.fillStyle='rgba(255,199,120,0.10)'; ctx.fillRect(0,0,w,h);
+      // disco solare in alto, come la luna di notte: palla luminosa con alone, senza raggi
+      const sunX=w*0.75, sunY=h*0.17;
+      const sunR=Math.min(w,h)*0.075;
+      const halo=ctx.createRadialGradient(sunX,sunY,sunR*0.3,sunX,sunY,sunR*6);
+      halo.addColorStop(0,'rgba(255,248,220,0.28)');
+      halo.addColorStop(0.3,'rgba(255,235,175,0.12)');
+      halo.addColorStop(1,'rgba(255,220,150,0)');
+      ctx.fillStyle=halo; ctx.beginPath(); ctx.arc(sunX,sunY,sunR*6,0,TAU); ctx.fill();
+      const disk=ctx.createRadialGradient(sunX-sunR*0.2,sunY-sunR*0.25,sunR*0.1,sunX,sunY,sunR);
+      disk.addColorStop(0,'#fffdf4');
+      disk.addColorStop(0.55,'#ffefbe');
+      disk.addColorStop(1,'#ffd878');
+      ctx.fillStyle=disk; ctx.beginPath(); ctx.arc(sunX,sunY,sunR,0,TAU); ctx.fill();
+      // nuvole volumetriche soffici illuminate dal sole
+      if(!derbyClouds){
+        derbyClouds=[];
+        for(let i=0;i<7;i++){
+          derbyClouds.push({x:rand(-200,w+200), y:rand(h*0.06,h*0.30), s:rand(0.7,1.7), v:rand(12,38)*(Math.random()<0.5?-1:1)});
+        }
+      }
+      const fdt2=clamp((performance.now()-lastRainT)/1000,0,0.05);
+      for(const cl of derbyClouds){
+        cl.x += cl.v*fdt2;
+        if(cl.x<-280) cl.x=w+260; if(cl.x>w+280) cl.x=-260;
+        ctx.save(); ctx.translate(cl.x,cl.y);
+        const cwB=46*cl.s;
+        for(let k=0;k<4;k++){
+          const ox=(k-1.5)*cwB*0.55, oy=(k%3-1)*6*cl.s, orad=cwB*(0.55+0.08*k);
+          const cg=ctx.createRadialGradient(ox,oy,0,ox,oy,orad);
+          cg.addColorStop(0,'rgba(255,255,255,0.95)');
+          cg.addColorStop(0.6,'rgba(250,246,235,0.6)');
+          cg.addColorStop(1,'rgba(250,240,220,0)');
+          ctx.fillStyle=cg; ctx.beginPath(); ctx.arc(ox,oy,orad,0,TAU); ctx.fill();
+        }
+        const sh=ctx.createLinearGradient(0,4,0,14);
+        sh.addColorStop(0,'rgba(120,110,95,0.18)');
+        sh.addColorStop(1,'rgba(120,110,95,0)');
+        ctx.fillStyle=sh; ctx.beginPath(); ctx.ellipse(0,10*cl.s,cwB*0.8,cwB*0.14,0,0,TAU); ctx.fill();
+        ctx.restore();
+      }
+      // bagliore diffuso che scaldi anche la parte in basso
+      const warm=ctx.createLinearGradient(0,0,0,h);
+      warm.addColorStop(0,'rgba(255,190,110,0.05)');
+      warm.addColorStop(0.7,'rgba(255,180,110,0)');
+      warm.addColorStop(1,'rgba(255,150,80,0.16)');
+      ctx.fillStyle=warm; ctx.fillRect(0,0,w,h);
     }
+    // vignettatura cinematografica
+    const vg=ctx.createRadialGradient(w/2,h/2,Math.min(w,h)*0.32, w/2,h/2,Math.max(w,h)*0.72);
+    const vA = weatherSel==='night' ? 0.16 : 0.22;
+    vg.addColorStop(0,'rgba(0,0,0,0)');
+    vg.addColorStop(1,`rgba(0,0,0,${vA})`);
+    ctx.fillStyle=vg; ctx.fillRect(0,0,w,h);
   }
 
   function drawHUD(){
@@ -3297,8 +4606,13 @@ const wEl=document.createElement('div');
   function restartDerby(){
     const el=document.getElementById('derbyEnd'); if(el) el.parentNode.removeChild(el);
     over=false; winner=null; elapsed=0; startRef=0; lastSnap=null;
+    jumboStart=performance.now();
     goBeeped=false; prevGo=0; phase='lobby';
     particles.length=0;
+    derbySkid.length=0;
+    shakeA=0; curShX=0; curShY=0;
+    toastList.length=0;
+    for(const k in prevCarState) delete prevCarState[k];
     roster.length=0;
     inputsBySlot.length=0;
     cars.length=0;
@@ -3324,6 +4638,16 @@ _derbyInt=setInterval(()=>{
     lastT=now;
     const humCar=focus();
     updateEngineHum(humCar? Math.min(1,Math.abs(humCar.s)/300) : 0, humCar? Math.abs(humCar.s)>35 : false);
+    // scivolata delle gomme: quanto più l'auto è inclinata rispetto alla direzione del moto, tanto più stridono
+    let skidV=0;
+    if(humCar && !humCar.destroyed && humCar.s>60){
+      const lat=Math.abs(Math.sin(normAngA(Math.atan2(humCar.vy,humCar.vx)-humCar.heading)))*humCar.s;
+      skidV=clamp((lat-70)/900,0,0.2);
+    }
+    try{
+      if(skidV>0.02) AudioEngine.loopNoise('skid','bandpass',850,skidV);
+      else AudioEngine.loopStop('skid');
+    }catch(_){}
     if(isHost) hostTick(dt);
     else if(role==='driver' && mySlot>=0 && !over && now-lastInSent>45 && !(lastSnap&&lastSnap.over)){
       const inp=readInput();
@@ -3360,13 +4684,16 @@ _derbyInt=setInterval(()=>{
   }
 
   function render(){
+    routeShake();
     ctx.clearRect(0,0,canvas.width,canvas.height);
     drawArena();
     drawParticles();
     const list=curList();
     const s=curSlot();
     for(const c of list) drawCar(c, (s>=0&&list[s]===c));
-drawWeather();
+    scanToasts(list);
+    drawWeather();
+    drawToasts();
     drawHUD();
     const phNow = isHost ? phase : (lastSnap&&lastSnap.phase!==undefined ? lastSnap.phase : 'lobby');
     if(phNow==='lobby'){
