@@ -301,7 +301,7 @@ canvas{display:block;background:#0d2f14;touch-action:none;}
     <div id="chatBar"><input id="chatInput" maxlength="120" placeholder="Messaggio… (Invio per inviare)"></div>
   </div>
   <div id="peerAudios"></div>
-  <div id="helpBtn">⌨️ WASD/Frecce · Shift DRS · Spazio Boost · la corsia box ti ferma da solo (gas per guidare a mano, esci manualmente) · Invio Chat</div>
+  <div id="helpBtn">⌨️ WASD/Frecce · Shift DRS · Spazio Boost · corsia box manuale: guida fino al tuo box e fermati (Invio Chat)</div>
 </div>
 
 <script type="module">
@@ -593,8 +593,8 @@ const TRACK_DEFS = [
     pts:[[0,-560],[520,-520],[620,-400],[560,-280],[600,-200],[900,-260],[980,-60],[900,120],[600,140],
          [560,240],[620,340],[420,460],[120,440],[-80,520],[-420,460],[-620,280],[-560,60],[-680,-140],
          [-560,-360],[-260,-500]] },
-  { name:'Circuito del Principato', theme:'#2e3348', width:88, scale:1.7,
-    drs:[0.5,0.66], pit:[0.14,0.28],
+{ name:'Circuito del Principato', theme:'#2e3348', width:88, scale:1.7,
+    drs:[0.5,0.66], pit:[0.92,0.08],
     pts:[[0,-380],[260,-360],[340,-240],[240,-160],[300,-80],[420,-100],[460,20],[340,80],[360,180],
          [220,240],[240,340],[80,380],[-160,340],[-340,280],[-280,140],[-320,60],[-420,-60],[-360,-220],
          [-180,-320]] },
@@ -603,7 +603,7 @@ const TRACK_DEFS = [
     pts:[[0,-500],[700,-460],[860,-260],[820,-40],[900,180],[700,380],[300,420],[60,340],[-160,400],
          [-520,340],[-780,120],[-760,-160],[-560,-340],[-260,-460]] },
   { name:'Circuito delle Ardenne', theme:'#243a2c', width:120, scale:1.45,
-    drs:[0.62,0.86], pit:[0.05,0.18],
+    drs:[0.62,0.86], pit:[0.02,0.16],
     pts:[[0,-460],[360,-500],[560,-380],[520,-220],[680,-140],[760,60],[660,180],[680,340],[420,440],
          [140,380],[-120,460],[-380,360],[-460,180],[-360,20],[-480,-160],[-380,-360],[-160,-440]] },
   { name:'Circuito Cittadino della Baia', theme:'#1e2440', width:82, scale:1,
@@ -1187,12 +1187,12 @@ function startGame(myName, myColor, roomCode, room, isSpectator, roomNet, roomMa
     tireWearCornerRate: 5.2,   // %/s a lateral-g massimo
     tireWearDrsExtra: 1.4,
     fuelBurnPerSec: 2.6,     // usato solo come consumo minimo "a folle" (motore acceso, fermo)
-    fuelLapsPerTank: 1.2,   // un pieno deve bastare per circa questi giri, su QUALSIASI circuito (si scala sulla sua lunghezza)
+    fuelLapsPerTank: 2,   // un pieno deve bastare per circa questi giri, su QUALSIASI circuito (si scala sulla sua lunghezza)
     fuelBurnBoostExtra: 1.6,
     grassSpeedMul: 0.22,   // fuoripista: forte penalità di velocità, non solo di aderenza
     grassGripMul: 0.4,
     collideDamage: 10,   // danno da un colpo "normale" (subito): 10 colpi esauriscono la salute (0-100)
-    pitSpeed: 235,           // quasi come in corsa: la corsia box non deve essere un collo di bottiglia
+    pitSpeed: 280,           // quasi come in corsa: la corsia box non deve essere un collo di bottiglia
     disabledCrawlSpeed: 45,  // in avaria si può solo arrancare, ma si deve poter comunque raggiungere i box
     // tempi ai box: più servizi si scelgono, più a lungo si resta fermi
     pitBoxDuration: {tires:3.1, fuelPerPct:0.052, damagePerPct:0.085, floor:2.6}
@@ -1286,11 +1286,9 @@ function startGame(myName, myColor, roomCode, room, isSpectator, roomNet, roomMa
 
   // ---------- box: overlay UI ----------
   let pendingPitService = null;
-  let pitMenuAutoTimer = null;
   $('#pitFuel').addEventListener('input', ()=> $('#pitFuelVal').textContent = $('#pitFuel').value+'%');
   function confirmPitMenu(){
     pendingPitService = { tires:$('#pitTires').checked, fuelPct:parseInt($('#pitFuel').value,10), damage:$('#pitDamage').checked };
-    pitMenuAutoTimer = null;
     $('#pitConfirm').textContent = 'CONFERMA E VAI AI BOX';
     $('#pitOverlay').style.display='none';
   }
@@ -1300,7 +1298,6 @@ function startGame(myName, myColor, roomCode, room, isSpectator, roomNet, roomMa
     $('#pitTires').checked = svc.tires;
     $('#pitFuel').value = svc.fuelPct; $('#pitFuelVal').textContent = svc.fuelPct+'%';
     $('#pitDamage').checked = svc.damage;
-    pitMenuAutoTimer = 3; // menu box automatico: si chiude da solo con le impostazioni correnti
     $('#pitOverlay').style.display='flex';
   }
 
@@ -1321,31 +1318,14 @@ function startGame(myName, myColor, roomCode, room, isSpectator, roomNet, roomMa
       c.speed = 0;
     }
     else {
-      // ---------- box automatico: stato della guida assistita (entry/exit) ----------
+      // ---------- box: guida totalmente manuale (niente autopilota) ----------
       const pitSlot = track.pitBoxSlots[c.pitBoxIndex];
-      const dToSlot = Math.hypot(c.x-pitSlot.x, c.y-pitSlot.y);
-      if(c.inPitLane && !c.pitServiceDone && !c.pitServicing){
-        // il pilota può sempre sovrascrivere l'autopilota: basta accelerare/frenare
-        const overriding = (inp.throttle>0 || inp.brake>0);
-        c.pitAuto = !overriding && dToSlot < track.boxTriggerR*2.2;
-        if(c.pitAuto && dToSlot < track.boxTriggerR*1.05){
-          c.pitServicing=true; c.pitServiceTimer=0; c.speed=0; c.pitAuto=false;
-          openPitMenuIfNeeded();
-          try{ sendPitFx({x:c.x,y:c.y}); }catch(_){}
-        }
-      } else {
-        c.pitAuto = false;
-      }
+      c.pitAuto = false;
       // sterzo
       const speedFactor = clamp(Math.abs(c.speed)/PHYS.steerSpeedRef, 0.25, 1.3);
-      const targetSteer = c.pitAuto ? 0 : inp.steer;
+      const targetSteer = inp.steer;
       c.steer = lerp(c.steer, targetSteer, clamp(dt*8,0,1));
       const gripMul = currentGripMul(c);
-      if(c.pitAuto){
-        const tgt = Math.atan2(pitSlot.y-c.y, pitSlot.x-c.x);
-        const dff = angDiff(c.heading, tgt);
-        c.steer = clamp(dff*2.2, -1, 1);
-      }
       if(!c.pitServicing) c.heading += c.steer*PHYS.maxSteerRate*speedFactor*gripMul*dt*(c.speed>=0?1:-1);
 
       const prog = track.progressOf(c.x,c.y);
@@ -1383,7 +1363,7 @@ function startGame(myName, myColor, roomCode, room, isSpectator, roomNet, roomMa
       if(c.inPitLane && !wasInPitLane){
         c.pitServiceDone=false; c.pitServicing=false; c.pitServiceTimer=0;
         pendingPitService = { tires:true, fuelPct:80, damage:c.damage>20 }; // preimpostazione ragionevole, regolabile una volta fermi
-        $('#pitBadge').style.display='block'; $('#pitBadge').textContent = '🔧 Corsia box: l\'auto ti porta al box #'+(c.pitBoxIndex+1)+' (gas per guidare a mano)';
+        $('#pitBadge').style.display='block'; $('#pitBadge').textContent = '🔧 Corsia box: guida tu fino al box #'+(c.pitBoxIndex+1)+' e fermati per il servizio';
         AudioEngine.tone(320,0.18,'square',0.18,240);
       }
       if(!c.inPitLane && wasInPitLane){
@@ -1392,9 +1372,8 @@ function startGame(myName, myColor, roomCode, room, isSpectator, roomNet, roomMa
       }
       c.offTrack = c.inPitLane ? false : prog.offTrack;
 
-      // se il pilota ha scelto di NON usare l'autopilota (sovrascritto), si mantiene il vecchio comportamento
       // manuale: fermarsi sotto i 28 km/h allo scatolone del proprio box per attivare il servizio.
-      if(c.inPitLane && !c.pitServiceDone && !c.pitServicing && !c.pitAuto){
+      if(c.inPitLane && !c.pitServiceDone && !c.pitServicing){
         const d = Math.hypot(c.x-pitSlot.x, c.y-pitSlot.y);
         if(d<track.boxTriggerR && Math.abs(c.speed)<28){
           c.pitServicing=true; c.pitServiceTimer=0; c.speed=0;
@@ -1402,12 +1381,7 @@ function startGame(myName, myColor, roomCode, room, isSpectator, roomNet, roomMa
           try{ sendPitFx({x:c.x,y:c.y}); }catch(_){}
         }
       }
-      // menu box automatico: countdown 3s dopodiché si conferma da solo con le impostazioni correnti
-      if(pitMenuAutoTimer!=null && $('#pitOverlay').style.display==='flex'){
-        pitMenuAutoTimer -= dt;
-        $('#pitConfirm').textContent = 'CONFERMA (auto in '+Math.max(0,Math.ceil(pitMenuAutoTimer))+'s)';
-        if(pitMenuAutoTimer<=0) confirmPitMenu();
-      }
+      // menu box: nessun countdown, il pilota conferma con calma quando vuole
       if(c.pitServicing){
         c.pitServiceTimer += dt;
         const svc = pendingPitService || {tires:true, fuelPct:60, damage:c.damage>25};
@@ -1417,7 +1391,6 @@ function startGame(myName, myColor, roomCode, room, isSpectator, roomNet, roomMa
           c.fuel = clamp(c.fuel+svc.fuelPct,0,100);
           if(svc.damage) c.damage=0;
           pendingPitService=null; c.pitServicing=false; c.pitServiceDone=true; c.pitAutoExit=false;
-          pitMenuAutoTimer=null;
           $('#pitConfirm').textContent='CONFERMA E VAI AI BOX';
           $('#pitOverlay').style.display='none';
           $('#pitBadge').textContent='✅ Box completato: esci dalla corsia box manualmente';
@@ -1440,8 +1413,7 @@ function startGame(myName, myColor, roomCode, room, isSpectator, roomNet, roomMa
 
       let accel=0, reversing=false;
       if(c.pitServicing){ /* fermo: servizio al box in corso */ }
-      else if(c.pitAuto){ /* l'autopilota gestisce la velocità verso lo slot */ }
-else if(inp.throttle>0 && c.fuel>0){
+      else if(inp.throttle>0 && c.fuel>0){
         accel = (disabled ? PHYS.accel*0.35 : PHYS.accel*(c.boosting?PHYS.boostAccelMul:1));
       } else if(inp.brake>0){
         if(c.speed>2){ accel=-PHYS.brakeDecel; c.battery=Math.min(100,c.battery+PHYS.battRegenPerBrakeSec*dt); }
@@ -1450,14 +1422,9 @@ else if(inp.throttle>0 && c.fuel>0){
         accel = -PHYS.coastDecel; // rilascio: rallenta fino a fermarsi, non va in retromarcia da solo
       }
       if(!c.pitServicing){
-        if(c.pitAuto){
-          // decelera dolcemente fino a fermarsi davanti allo slot (lerp speed → 0)
-          c.speed = lerp(c.speed, dToSlot<track.boxTriggerR? 0 : 34, clamp(dt*2.2,0,1));
-        } else {
-          let newSpeed = c.speed + accel*dt;
-          if(!reversing && c.speed>=0 && newSpeed<0) newSpeed=0;
-          c.speed = clamp(newSpeed, -PHYS.reverseSpeed, topSpeed);
-        }
+        let newSpeed = c.speed + accel*dt;
+        if(!reversing && c.speed>=0 && newSpeed<0) newSpeed=0;
+        c.speed = clamp(newSpeed, -PHYS.reverseSpeed, topSpeed);
       }
 
       // usura gomme e carburante
@@ -1628,6 +1595,7 @@ else if(inp.throttle>0 && c.fuel>0){
         myCar.lapStartAt = null;
         myCar.__wasDisabled = false;
         pendingPitService = null;
+        $('#pitOverlay').style.display='none';
         skidMarks.length = 0;
         $('#pitBadge').style.display='none';
       }
