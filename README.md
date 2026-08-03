@@ -4,7 +4,7 @@
 Racing / Demolition Derby **multiplayer serverless** che gira interamente nel browser.
 
 Progetto fork-canale da un tutorial su YouTube e migliorato qui:
-**https://github.com/abatukam88/Top-Gear-P2P---Enhanced-Version**
+**(https://sanciopanza88.github.io/Top-Gear-P2P---Enhanced-Version/)**
 
 Nessun server dedicato: ogni browser è sia client che host, ed i giocatori si trovano in
 rete tramite **Trystero** (WebRTC) attraverso torrent straddle (stile WebTorrent). Basta aprire
