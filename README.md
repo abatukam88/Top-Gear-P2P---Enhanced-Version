@@ -5,7 +5,7 @@ Racing / Demolition Derby **multiplayer serverless** che gira interamente nel br
 Progetto fork-canale da un tutorial YouTube, migliorato in questo repository.
 
 ## 🔥 GIOCA ORA: Abisso Enhanced Version
-### 👉 https://sanciopanza88.github.io/Abisso-Enhanced-Version/
+### 👉 https://sanciopanza88.github.io/Abisso-2.0/
 
 Gioca anche a Top Gear P2P Enhanced: https://sanciopanza88.github.io/Top-Gear-P2P---Enhanced-Version/
 
